@@ -1,0 +1,57 @@
+name: Dockerfile build check
+
+on:
+  pull_request:
+    # Run this workflow when files change in a PR. We later detect which Dockerfiles changed and build them.
+    # Keep the path filter broad enough to catch edits to Dockerfiles; include both known locations.
+    paths:
+      - 'Dockerfile'
+      - 'lab_2/Dockerfile'
+
+jobs:
+  build-dockerfile:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU (optional, for multi-arch builds)
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build changed Dockerfile(s)
+        # Detect changed Dockerfile paths in the PR and build each one using its directory as the build context.
+        run: |
+          set -euo pipefail
+          echo "Detecting changed files between base and head..."
+          BASE_SHA=${{ github.event.pull_request.base.sha }}
+          HEAD_SHA=${{ github.sha }}
+          echo "Base: $BASE_SHA"; echo "Head: $HEAD_SHA"
+
+          # Ensure the base commit is available locally (fetch it) so git diff works.
+          echo "Fetching base commit from origin..."
+          git fetch origin "$BASE_SHA" || true
+
+          # List changed files and filter for Dockerfile entries.
+          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -E '(^|/)Dockerfile$' || true)
+          if [ -z "$changed" ]; then
+            echo "No Dockerfile changes detected. Skipping build."
+            exit 0
+          fi
+
+          echo "Dockerfile(s) changed:\n$changed"
+          for f in $changed; do
+            # Determine build context: directory containing the Dockerfile (or . for root)
+            context_dir=$(dirname "$f")
+            if [ "$context_dir" = "." ] || [ -z "$context_dir" ]; then
+              context_dir='.'
+            fi
+            echo "Building Dockerfile '$f' with context '$context_dir'..."
+            docker build --no-cache --progress=plain -t ci-docker-check:${{ github.sha }} -f "$f" "$context_dir"
+          done
