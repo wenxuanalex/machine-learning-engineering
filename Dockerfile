@@ -1,5 +1,5 @@
 # last updated Mar 25 2025, 11:00am
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 # Set non-interactive mode for apt-get
 ENV DEBIAN_FRONTEND=noninteractive
@@ -21,6 +21,9 @@ ENV PATH=$PATH:$JAVA_HOME/bin
 # Set the working directory
 WORKDIR /app
 
+# Ensure project imports work (e.g. `import utils...`) when running notebooks/scripts
+ENV PYTHONPATH=/app
+
 # Copy the requirements file into the container
 COPY requirements.txt ./
 
@@ -29,8 +32,8 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 # RUN pip install pyspark
 
-# Expose the default JupyterLab port
-EXPOSE 8888
+# Expose MLflow UI (5000) and JupyterLab (8888)
+EXPOSE 5000 8888
 
 # Create a volume mount point for notebooks
 VOLUME /app
