@@ -1,11 +1,41 @@
 services:
   jupyter:
     build: .
-    container_name: jupyter_lab
     ports:
       - "8888:8888"
     volumes:
-      - .:/app
+      # Mount relevant folders so edits reflect live without rebuilding the image
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./scripts:/app/scripts
+      - ./eda:/app/eda
+      - ./main.py:/app/main.py
     environment:
       - JUPYTER_ENABLE_LAB=yes
     command: ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--notebook-dir=/app", "--ServerApp.token=''", "--ServerApp.disable_check_xsrf=True"]
+
+  mlflow:
+    build: .
+    ports:
+      - "${MLFLOW_HOST_PORT:-5000}:5000"
+    volumes:
+      - ./data:/app/data
+      - ./utils:/app/utils
+      - ./scripts:/app/scripts
+      - ./mlruns:/app/mlruns
+    environment:
+      - PYTHONPATH=/app
+    command: ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000", "--backend-store-uri", "file:/app/mlruns", "--default-artifact-root", "file:/app/mlruns"]
+
+  airflow:
+    image: apache/airflow:2.9.3
+    profiles: ["optional"]
+    ports:
+      - "8080:8080"
+    environment:
+      - AIRFLOW__CORE__LOAD_EXAMPLES=false
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
+    volumes:
+      - ./dags:/opt/airflow/dags
+    command: ["airflow", "standalone"]
