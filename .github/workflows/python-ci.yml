@@ -1,6 +1,8 @@
 name: Python CI (ruff + pytest)
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
