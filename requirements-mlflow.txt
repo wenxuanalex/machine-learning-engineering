@@ -1,0 +1,4 @@
+# Optional dependencies for experiment tracking / model registry.
+# Kept separate from base requirements to avoid pulling heavy/native deps
+# (e.g. pyarrow) into every environment.
+mlflow==2.14.3

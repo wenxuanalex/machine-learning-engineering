@@ -1,0 +1,19 @@
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+extend-exclude = [
+	# Data engineering scripts are currently not lint-clean; keep CI signal focused.
+	"utils/",
+	"lab_2/",
+	"eda/",
+	"scripts/",
+]
+
+[tool.ruff.lint]
+# Keep this minimal and practical for a learning repo.
+select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

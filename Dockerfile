@@ -26,10 +26,11 @@ ENV PYTHONPATH=/app
 
 # Copy the requirements file into the container
 COPY requirements.txt ./
+COPY requirements-mlflow.txt ./
 
 # Install Python dependencies (ensure that pyspark is in your requirements.txt,
 # or you can install it explicitly by uncommenting the next line)
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-mlflow.txt
 # RUN pip install pyspark
 
 # Expose MLflow UI (5000) and JupyterLab (8888)
