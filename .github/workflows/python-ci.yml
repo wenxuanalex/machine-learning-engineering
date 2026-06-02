@@ -1,6 +1,7 @@
 name: Python CI (ruff + pytest)
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [main]
 
