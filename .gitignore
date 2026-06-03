@@ -4,5 +4,4 @@ __pycache__/
 .ipynb_checkpoints/
 .DS_Store
 .env
-data/bronze/
 datamart/
