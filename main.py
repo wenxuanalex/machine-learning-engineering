@@ -1,13 +1,16 @@
-import os
+from utils.bronze import ingest
 
-import pyspark
+BRONZE_SOURCES = [
+    ("data/data.csv",                               "data/bronze/transactions.parquet"),
+    ("data/bronze_customer_metadata_synthetic.csv", "data/bronze/customer_metadata.parquet"),
+    ("data/ancillary.csv",                          "data/bronze/ancillary.parquet"),
+]
 
-if not os.environ.get("JAVA_HOME"):
-    os.environ["JAVA_HOME"] = "/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+print("=== Bronze Ingestion ===")
+for src, dest in BRONZE_SOURCES:
+    result = ingest(src, dest)
+    print(f"\n{result['source']} → {result['destination']}")
+    print(f"  Rows  : {result['rows']:,}")
+    print(f"  Schema: {result['schema']}")
 
-spark = pyspark.sql.SparkSession.builder \
-    .appName("Pipeline") \
-    .master("local[*]") \
-    .config("spark.driver.memory", "4g") \
-    .getOrCreate()
-spark.sparkContext.setLogLevel("ERROR")
+print("\nBronze ingestion complete.")
