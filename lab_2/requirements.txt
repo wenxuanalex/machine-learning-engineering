@@ -1,3 +1,0 @@
-# lab_2 uses the same Python dependencies as the repo root to avoid version drift.
-# If lab_2 needs extra libs in future, add them here below the -r line.
--r ../requirements.txt
