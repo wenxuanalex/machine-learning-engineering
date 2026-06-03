@@ -6,7 +6,6 @@ on:
     # Keep the path filter broad enough to catch edits to Dockerfiles; include both known locations.
     paths:
       - 'Dockerfile'
-      - 'lab_2/Dockerfile'
 
 jobs:
   build-dockerfile:
@@ -47,7 +46,10 @@ jobs:
 
           echo "Dockerfile(s) changed:\n$changed"
           for f in $changed; do
-            # Determine build context: directory containing the Dockerfile (or . for root)
+            if [ ! -f "$f" ]; then
+              echo "Skipping '$f' — file no longer exists (deleted)."
+              continue
+            fi
             context_dir=$(dirname "$f")
             if [ "$context_dir" = "." ] || [ -z "$context_dir" ]; then
               context_dir='.'
