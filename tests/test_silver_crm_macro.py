@@ -1,13 +1,21 @@
 import pandas as pd
 import pytest
 
-from utils.silver import clean_customer_metadata, clean_macro_monthly
+from utils.silver import (
+    clean_customer_metadata,
+    clean_macro_monthly,
+    clean_transactions,
+)
 
 
 @pytest.fixture
 def crm_df(tmp_path):
+    # Build silver transactions first so the CRM validation has something to check against
+    tx_dest = str(tmp_path / "transactions.parquet")
+    clean_transactions(dest_parquet=tx_dest)
+
     dest = str(tmp_path / "crm.parquet")
-    clean_customer_metadata(dest_parquet=dest)
+    clean_customer_metadata(dest_parquet=dest, silver_tx_parquet=tx_dest)
     return pd.read_parquet(dest)
 
 
