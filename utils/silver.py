@@ -155,3 +155,25 @@ def clean_macro_monthly(
         "months_available_raw": months_available,
         "nulls": int(out.isnull().sum().sum()),
     }
+
+def date_dim(src_parquet: str = "data/bronze/ancillary.parquet", dest_parquet: str = "data/silver/silver_date_dim.parquet") -> dict:
+    df = pd.read_parquet(src_parquet)
+    date_dim = df[["Date", "Is_Holiday"]].copy() 
+    date_dim['Date']=pd.to_datetime(date_dim['Date'])
+    date_dim["Is_Holiday"] = date_dim["Is_Holiday"].map({"True": 1, "False": 0})
+    date_dim = date_dim.rename(columns={"Is_Holiday":"is_bank_holiday"})
+    
+    date_dim["is_q4"] = date_dim["Date"].dt.quarter.eq(4).astype(int)
+    date_dim["month"] = date_dim["Date"].dt.month
+    date_dim["quarter"] = date_dim["Date"].dt.quarter
+    date_dim["year_month"] = date_dim["Date"].dt.to_period("M").astype(str)
+    
+    Path(dest_parquet).parent.mkdir(parents=True, exist_ok=True)
+    date_dim.to_parquet(dest_parquet, index=False)
+    return {
+        "source": src_parquet,
+        "destination": dest_parquet,
+        "rows": len(date_dim),
+        "schema": {col: str(dtype) for col, dtype in date_dim.dtypes.items()},
+    }
+    
