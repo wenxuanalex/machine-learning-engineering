@@ -1,5 +1,5 @@
 from utils.bronze import ingest
-from utils.silver import clean_transactions, clean_customer_metadata, clean_macro_monthly
+from utils.silver import clean_transactions, clean_customer_metadata, clean_macro_monthly, date_dim
 
 BRONZE_SOURCES = [
     ("data/data.csv",                               "data/bronze/transactions.parquet"),
@@ -26,5 +26,10 @@ print(f"  Rows: {crm_result['rows']:,}  |  Unmatched CRM customers: {crm_result[
 print("\n=== Silver: Macro monthly ===")
 macro_result = clean_macro_monthly()
 print(f"  Rows: {macro_result['rows']}  |  Months in raw panel: {macro_result['months_available_raw']}  |  Nulls: {macro_result['nulls']}")
+
+print("\n=== Silver: Calendar Features ===")
+cal_fe = date_dim()
+print(f"\n{cal_fe['source']} → {cal_fe['destination']}")
+print(f"  Rows: {cal_fe['rows']}  |  Schema: {cal_fe['schema']} ")
 
 print("\nPipeline complete.")
