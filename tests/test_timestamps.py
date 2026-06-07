@@ -4,7 +4,7 @@ import pytest
 from utils.timestamps import (
     create_join_keys,
     standardize_ancillary_timestamps,
-    standardize_customer_metadata_timestamps,
+    #standardize_customer_metadata_timestamps,
     standardize_transactions_timestamps,
 )
 
