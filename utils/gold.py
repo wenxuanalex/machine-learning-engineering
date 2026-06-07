@@ -231,3 +231,90 @@ def build_gold_feature_store(
         "feature_list": feature_list,
         "label_rate_churn": round(float(feature_store["is_churn_label"].mean()), 4),
     }
+
+
+def _build_churn_label_and_split(
+    silver_tx: pd.DataFrame,
+    features: pd.DataFrame,
+    label_start: pd.Timestamp,
+    label_end: pd.Timestamp,
+    test_size: float,
+    val_size: float,
+    random_state: int,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    tx_in_label_window = silver_tx[
+        (silver_tx["invoice_date"] >= label_start) & (silver_tx["invoice_date"] <= label_end)
+    ]
+    customers_in_label_window = tx_in_label_window["customer_id"].unique()
+
+    features["churn"] = 1
+    features.loc[features["customer_id"].isin(customers_in_label_window), "churn"] = 0
+
+    # Stratified split
+    from sklearn.model_selection import train_test_split
+
+    train_val, test = train_test_split(
+        features,
+        test_size=test_size,
+        stratify=features["churn"],
+        random_state=random_state,
+    )
+
+    # Adjust val_size to be a proportion of the remaining data
+    val_size_adjusted = val_size / (1 - test_size)
+
+    train, val = train_test_split(
+        train_val,
+        test_size=val_size_adjusted,
+        stratify=train_val["churn"],
+        random_state=random_state,
+    )
+
+    return train, val, test
+
+
+def build_gold_train_test_split(
+    feature_store_path: str = "data/gold/feature_store.parquet",
+    silver_tx_parquet: str = "data/silver/transactions.parquet",
+    label_start: str = "2011-09-01",
+    label_end: str = "2011-12-31",
+    test_size: float = 0.15,
+    val_size: float = 0.15,
+    random_state: int = 42,
+    train_path: str = "data/gold/train_labeled.parquet",
+    val_path: str = "data/gold/val_labeled.parquet",
+    test_path: str = "data/gold/test_labeled.parquet",
+) -> dict:
+    """Build and split the gold feature store into train, validation, and test sets."""
+    features = pd.read_parquet(feature_store_path)
+    silver_tx = pd.read_parquet(silver_tx_parquet)
+
+    label_start_ts = _as_timestamp(label_start)
+    label_end_ts = _as_timestamp(label_end)
+
+    train, val, test = _build_churn_label_and_split(
+        silver_tx=silver_tx,
+        features=features,
+        label_start=label_start_ts,
+        label_end=label_end_ts,
+        test_size=test_size,
+        val_size=val_size,
+        random_state=random_state,
+    )
+
+    Path(train_path).parent.mkdir(parents=True, exist_ok=True)
+    train.to_parquet(train_path, index=False)
+    val.to_parquet(val_path, index=False)
+    test.to_parquet(test_path, index=False)
+
+    churn_rate = features["churn"].mean()
+
+    return {
+        "train_path": train_path,
+        "val_path": val_path,
+        "test_path": test_path,
+        "train_rows": len(train),
+        "val_rows": len(val),
+        "test_rows": len(test),
+        "churn_rate": f"{churn_rate:.3%}",
+    }

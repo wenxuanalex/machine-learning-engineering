@@ -1,6 +1,6 @@
 from utils.bronze import ingest
 from utils.silver import clean_transactions, clean_customer_metadata, clean_macro_monthly, date_dim
-from utils.gold import build_gold_feature_store
+from utils.gold import build_gold_feature_store, build_gold_train_test_split
 
 BRONZE_SOURCES = [
     ("data/data.csv",                               "data/bronze/transactions.parquet"),
@@ -39,9 +39,17 @@ print(f"  Destination         : {gold_result['destination']}")
 print(f"  Rows                : {gold_result['rows']:,}")
 print(f"  Modelable customers : {gold_result['modelable_customers']:,}")
 print(f"  Observation window  : {gold_result['observation_window']}")
-print(f"  Label window        : {gold_result['label_window']}")
 print(f"  Macro snapshot month: {gold_result['macro_snapshot_month']}")
-print(f"  Churn rate          : {gold_result['label_rate_churn']}")
 print(f"  Features            : {', '.join(gold_result['feature_list'])}")
+
+print("\n=== Gold: Train/Test Split (G2) ===")
+split_result = build_gold_train_test_split()
+print(f"  Train path          : {split_result['train_path']}")
+print(f"  Val path            : {split_result['val_path']}")
+print(f"  Test path           : {split_result['test_path']}")
+print(f"  Train rows          : {split_result['train_rows']:,}")
+print(f"  Val rows            : {split_result['val_rows']:,}")
+print(f"  Test rows           : {split_result['test_rows']:,}")
+print(f"  Churn rate          : {split_result['churn_rate']}")
 
 print("\nPipeline complete.")
