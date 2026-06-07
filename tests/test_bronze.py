@@ -6,7 +6,7 @@ from utils.bronze import ingest
 SOURCES = [
     "data/data.csv",
     "data/bronze_customer_metadata_synthetic.csv",
-    "data/ancillary.csv",
+    "data/ancillary_20101201_to_20111231.csv",
 ]
 
 
