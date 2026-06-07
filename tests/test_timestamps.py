@@ -47,7 +47,8 @@ def test_transactions_has_temporal_features(timestamped_transactions):
 
 
 def test_transactions_temporal_features_are_numeric(timestamped_transactions):
-    numeric_features = ["invoice_year", "invoice_month", "invoice_day", "invoice_dayofweek", "invoice_quarter", "invoice_week"]
+    numeric_features = ["invoice_year", "invoice_month", "invoice_day", "invoice_dayofweek", 
+                        "invoice_quarter", "invoice_week"]
     for feature in numeric_features:
         assert pd.api.types.is_numeric_dtype(timestamped_transactions[feature])
 
