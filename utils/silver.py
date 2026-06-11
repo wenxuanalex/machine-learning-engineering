@@ -30,6 +30,9 @@ def clean_transactions(
     df["UnitPrice"] = pd.to_numeric(df["UnitPrice"], errors="coerce")
     df["InvoiceDate"] = pd.to_datetime(df["InvoiceDate"], errors="coerce")
 
+    # Drop rows where date couldn't be parsed
+    df = df[df["InvoiceDate"].notna()]
+
     # Drop null CustomerID
     df = df[df["CustomerID"].notna()]
 
@@ -39,11 +42,14 @@ def clean_transactions(
     # Drop negative quantity
     df = df[df["Quantity"] > 0]
 
-    # Drop negatice unit price
+    # Drop negative unit price
     df = df[df["UnitPrice"] > 0]
 
-    # Filter
+    # Filter non-product SKUs
     df = df[~df["StockCode"].isin(NON_PRODUCT_STOCKCODES)]
+
+    # Drop exact duplicate invoice lines (inflates revenue and basket metrics downstream)
+    df = df.drop_duplicates()
 
     # Compute revenue
     df["Revenue"] = df["Quantity"] * df["UnitPrice"]
@@ -88,6 +94,9 @@ def clean_customer_metadata(
     df["payment_terms_days"] = pd.to_numeric(df["payment_terms_days"], errors="coerce").astype("Int64")
     df["years_in_business"] = pd.to_numeric(df["years_in_business"], errors="coerce").astype("Int64")
     df["is_vip"] = pd.to_numeric(df["is_vip"], errors="coerce").astype("Int64")
+
+    # Keep the first record per customer; duplicates indicate upstream CRM data entry errors
+    df = df.drop_duplicates(subset=["customer_id"])
 
     # Validate against known customer IDs from silver transactions
     tx = pd.read_parquet(silver_tx_parquet)
@@ -158,22 +167,23 @@ def clean_macro_monthly(
 
 def date_dim(src_parquet: str = "data/bronze/ancillary.parquet", dest_parquet: str = "data/silver/silver_date_dim.parquet") -> dict:
     df = pd.read_parquet(src_parquet)
-    date_dim = df[["Date", "Is_Holiday"]].copy() 
-    date_dim['Date']=pd.to_datetime(date_dim['Date'])
-    date_dim["Is_Holiday"] = date_dim["Is_Holiday"].map({"True": 1, "False": 0})
-    date_dim = date_dim.rename(columns={"Is_Holiday":"is_bank_holiday"})
-    
-    date_dim["is_q4"] = date_dim["Date"].dt.quarter.eq(4).astype(int)
-    date_dim["month"] = date_dim["Date"].dt.month
-    date_dim["quarter"] = date_dim["Date"].dt.quarter
-    date_dim["year_month"] = date_dim["Date"].dt.to_period("M").astype(str)
+    dim = df[["Date", "Is_Holiday"]].copy()
+    dim["Date"] = pd.to_datetime(dim["Date"])
+    dim = dim.drop_duplicates(subset="Date")
+    dim["Is_Holiday"] = dim["Is_Holiday"].map({"True": 1, "False": 0}).fillna(0).astype(int)
+    dim = dim.rename(columns={"Is_Holiday": "is_bank_holiday"})
+
+    dim["is_q4"] = dim["Date"].dt.quarter.eq(4).astype(int)
+    dim["month"] = dim["Date"].dt.month
+    dim["quarter"] = dim["Date"].dt.quarter
+    dim["year_month"] = dim["Date"].dt.to_period("M").astype(str)
     
     Path(dest_parquet).parent.mkdir(parents=True, exist_ok=True)
-    date_dim.to_parquet(dest_parquet, index=False)
+    dim.to_parquet(dest_parquet, index=False)
     return {
         "source": src_parquet,
         "destination": dest_parquet,
-        "rows": len(date_dim),
-        "schema": {col: str(dtype) for col, dtype in date_dim.dtypes.items()},
+        "rows": len(dim),
+        "schema": {col: str(dtype) for col, dtype in dim.dtypes.items()},
     }
     

@@ -205,6 +205,9 @@ def build_gold_feature_store(
     for key, value in macro_values.items():
         feature_store[key] = value
 
+    # in_transactions is a silver diagnostic flag, not a model feature
+    feature_store = feature_store.drop(columns=["in_transactions"], errors="ignore")
+
     Path(dest_parquet).parent.mkdir(parents=True, exist_ok=True)
     feature_store.to_parquet(dest_parquet, index=False)
 
@@ -234,29 +237,18 @@ def build_gold_feature_store(
 
 
 def _build_churn_label_and_split(
-    silver_tx: pd.DataFrame,
     features: pd.DataFrame,
-    label_start: pd.Timestamp,
-    label_end: pd.Timestamp,
     test_size: float,
     val_size: float,
     random_state: int,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    tx_in_label_window = silver_tx[
-        (silver_tx["invoice_date"] >= label_start) & (silver_tx["invoice_date"] <= label_end)
-    ]
-    customers_in_label_window = tx_in_label_window["customer_id"].unique()
-
-    features["churn"] = 1
-    features.loc[features["customer_id"].isin(customers_in_label_window), "churn"] = 0
-
-    # Stratified split
+    # is_churn_label is already built in G1 — reuse it rather than re-deriving
     from sklearn.model_selection import train_test_split
 
     train_val, test = train_test_split(
         features,
         test_size=test_size,
-        stratify=features["churn"],
+        stratify=features["is_churn_label"],
         random_state=random_state,
     )
 
@@ -266,7 +258,7 @@ def _build_churn_label_and_split(
     train, val = train_test_split(
         train_val,
         test_size=val_size_adjusted,
-        stratify=train_val["churn"],
+        stratify=train_val["is_churn_label"],
         random_state=random_state,
     )
 
@@ -275,9 +267,6 @@ def _build_churn_label_and_split(
 
 def build_gold_train_test_split(
     feature_store_path: str = "data/gold/feature_store.parquet",
-    silver_tx_parquet: str = "data/silver/transactions.parquet",
-    label_start: str = "2011-09-01",
-    label_end: str = "2011-12-31",
     test_size: float = 0.15,
     val_size: float = 0.15,
     random_state: int = 42,
@@ -285,18 +274,11 @@ def build_gold_train_test_split(
     val_path: str = "data/gold/val_labeled.parquet",
     test_path: str = "data/gold/test_labeled.parquet",
 ) -> dict:
-    """Build and split the gold feature store into train, validation, and test sets."""
+    """Split the gold feature store into train, validation, and test sets."""
     features = pd.read_parquet(feature_store_path)
-    silver_tx = pd.read_parquet(silver_tx_parquet)
-
-    label_start_ts = _as_timestamp(label_start)
-    label_end_ts = _as_timestamp(label_end)
 
     train, val, test = _build_churn_label_and_split(
-        silver_tx=silver_tx,
         features=features,
-        label_start=label_start_ts,
-        label_end=label_end_ts,
         test_size=test_size,
         val_size=val_size,
         random_state=random_state,
@@ -307,7 +289,7 @@ def build_gold_train_test_split(
     val.to_parquet(val_path, index=False)
     test.to_parquet(test_path, index=False)
 
-    churn_rate = features["churn"].mean()
+    churn_rate = features["is_churn_label"].mean()
 
     return {
         "train_path": train_path,
