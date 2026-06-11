@@ -116,10 +116,16 @@ def clean_customer_metadata(
 
 
 #Macro monthly panel
-RETURN_COLS = ["EWU", "^FTAS", "^FTMC", "^FTSE"]
+# Maps raw ancillary column name -> short output name used in downstream tables
+RETURN_COLS = {
+    "iShares MSCI UK ETF": "ewu",
+    "FTSE All-Share Index": "ftas",
+    "FTSE 250 Index":       "ftmc",
+    "FTSE 100 Index":       "ftse",
+}
 LEVEL_COLS = [
     "UK_CPI", "UK_Ind_Production", "UK_GDP",
-    "UK_CPI_YoY", "UK_Ind_Prod_YoY", "UK_GDP_QoQ", "UK_GDP_YoY",
+    "UK_CPI_YoY", "UK_Ind_Prod_YoY", "UK_GDP_YoY",
 ]
 OBS_LABEL_MONTHS = pd.period_range("2010-12", "2011-12", freq="M")
 
@@ -131,18 +137,17 @@ def clean_macro_monthly(
     """Aggregate daily macro/market data into a complete monthly panel."""
     df = pd.read_parquet(src_parquet)
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-    for c in RETURN_COLS + LEVEL_COLS:
+    for c in list(RETURN_COLS.keys()) + LEVEL_COLS:
         df[c] = pd.to_numeric(df[c], errors="coerce")
     df["Is_Holiday"] = df["Is_Holiday"].map({"True": True, "False": False}).astype(bool)
     df["year_month"] = df["Date"].dt.to_period("M")
 
     out = pd.DataFrame(index=sorted(df["year_month"].unique()))
-    for c in RETURN_COLS:
-        clean = c.replace("^", "").lower()
-        out[f"{clean}_monthly_return"] = (
-            df.groupby("year_month")[c].apply(lambda r: (1 + r).prod() - 1)
+    for raw_col, short_name in RETURN_COLS.items():
+        out[f"{short_name}_monthly_return"] = (
+            df.groupby("year_month")[raw_col].apply(lambda r: (1 + r).prod() - 1)
         )
-        out[f"{clean}_volatility"] = df.groupby("year_month")[c].std()
+        out[f"{short_name}_volatility"] = df.groupby("year_month")[raw_col].std()
     for c in LEVEL_COLS:
         out[c.lower()] = df.groupby("year_month")[c].last()
     out["holidays_in_month"] = df.groupby("year_month")["Is_Holiday"].sum()
