@@ -75,7 +75,7 @@ def _build_cancellation_rate(
     raw["CustomerID"] = pd.to_numeric(raw["CustomerID"], errors="coerce")
     raw["InvoiceDate"] = pd.to_datetime(raw["InvoiceDate"], errors="coerce")
     raw = raw[raw["CustomerID"].notna()]
-    raw["customer_id"] = raw["CustomerID"].astype("int64")
+    raw["customer_id"] = raw["CustomerID"].astype("int64").astype(str)
 
     raw_obs = raw[(raw["InvoiceDate"] >= obs_start) & (raw["InvoiceDate"] <= obs_end)]
     raw_obs = raw_obs[raw_obs["customer_id"].isin(modelable_customers)]
