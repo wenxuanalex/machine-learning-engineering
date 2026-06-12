@@ -5,7 +5,7 @@ from utils.gold import build_gold_feature_store, build_gold_train_test_split
 BRONZE_SOURCES = [
     ("data/data.csv",                               "data/bronze/transactions.parquet"),
     ("data/bronze_customer_metadata_synthetic.csv", "data/bronze/customer_metadata.parquet"),
-    ("data/ancillary.csv",                          "data/bronze/ancillary.parquet"),
+    ("data/ancillary_20101201_to_20111231.csv",      "data/bronze/ancillary.parquet"),
 ]
 
 print("=== Bronze Ingestion ===")
