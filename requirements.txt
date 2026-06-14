@@ -9,3 +9,6 @@ scikit-learn==1.6.1
 pyspark==3.5.5
 optuna==3.6.1
 python-dateutil==2.9.0.post0
+mlflow==3.1.0
+shap==0.51.0
+evidently==0.7.21

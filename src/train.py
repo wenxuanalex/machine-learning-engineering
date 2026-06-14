@@ -140,7 +140,7 @@ def tune_gbm(
         params = {
             "n_estimators": trial.suggest_int("n_estimators", 50, 300),
             "max_depth": trial.suggest_int("max_depth", 2, 7),
-            "learning_rate": trial.suggest_float("learning_rate", 1e-3, 0.3, log=True),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
             "subsample": trial.suggest_float("subsample", 0.6, 1.0),
             "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 20),
         }
