@@ -1,0 +1,12 @@
+data/
+mlruns/
+reports/
+.git/
+.github/
+eda/
+__pycache__/
+*.pyc
+.DS_Store
+*.csv
+*.parquet
+.env

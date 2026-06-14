@@ -10,6 +10,9 @@ services:
       - ./scripts:/app/scripts
       - ./eda:/app/eda
       - ./main.py:/app/main.py
+      - ./src:/app/src
+      - ./reports:/app/reports
+      - ./mlruns:/app/mlruns
     environment:
       - JUPYTER_ENABLE_LAB=yes
     command: ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--notebook-dir=/app", "--ServerApp.token=''", "--ServerApp.disable_check_xsrf=True", "--ContentsManager.autosave_interval=15"]
@@ -22,6 +25,8 @@ services:
       - ./data:/app/data
       - ./utils:/app/utils
       - ./scripts:/app/scripts
+      - ./src:/app/src
+      - ./reports:/app/reports
       - ./mlruns:/app/mlruns
     environment:
       - PYTHONPATH=/app
