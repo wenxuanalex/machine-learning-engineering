@@ -36,6 +36,15 @@ services:
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
+      # Make the project's `utils` package importable from the DAG
+      - PYTHONPATH=/opt/airflow
+      # The base Airflow image ships neither scikit-learn nor pyarrow, both of
+      # which the gold pipeline needs. Pin to match requirements.txt.
+      - _PIP_ADDITIONAL_REQUIREMENTS=pandas==2.2.3 numpy==1.26.4 scikit-learn==1.6.1 pyarrow
     volumes:
       - ./dags:/opt/airflow/dags
+      # The DAG tasks chdir to /opt/airflow and call the same utils as main.py,
+      # reading and writing the data layers in place.
+      - ./utils:/opt/airflow/utils
+      - ./data:/opt/airflow/data
     command: ["airflow", "standalone"]
