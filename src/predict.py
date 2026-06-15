@@ -12,7 +12,8 @@ import argparse
 import os
 from datetime import datetime, timezone
 
-import mlflow.pyfunc
+import mlflow.sklearn
+import mlflow.tracking
 import pandas as pd
 
 MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
@@ -28,9 +29,19 @@ NON_FEATURE_COLS = {
 }
 
 
+def _load_optimal_threshold(client: mlflow.tracking.MlflowClient) -> float:
+    """Retrieve the optimal_threshold param logged during training for the Production model."""
+    prod_version = client.get_model_version_by_alias(MODEL_NAME, MODEL_STAGE).version
+    run_id = client.get_model_version(MODEL_NAME, prod_version).run_id
+    run = client.get_run(run_id)
+    return float(run.data.params.get("optimal_threshold", 0.5))
+
+
 def batch_predict(input_path: str, output_path: str) -> pd.DataFrame:
     mlflow.set_tracking_uri(MLFLOW_URI)
-    model = mlflow.pyfunc.load_model(f"models:/{MODEL_NAME}@{MODEL_STAGE}")
+    client = mlflow.tracking.MlflowClient()
+    model = mlflow.sklearn.load_model(f"models:/{MODEL_NAME}@{MODEL_STAGE}")
+    threshold = _load_optimal_threshold(client)
 
     df = pd.read_parquet(input_path)
     customer_ids = df["customer_id"]
@@ -40,16 +51,16 @@ def batch_predict(input_path: str, output_path: str) -> pd.DataFrame:
     ]
     features = df[feature_cols]
 
-    proba = model.predict(features)
+    proba = model.predict_proba(features)[:, 1]
     out = pd.DataFrame({
         "customer_id": customer_ids,
         "churn_probability": proba,
-        "churn_prediction": (proba >= 0.5).astype(int),
+        "churn_prediction": (proba >= threshold).astype(int),
         "predicted_at": datetime.now(timezone.utc).isoformat(),
     })
 
     out.to_parquet(output_path, index=False)
-    print(f"Predictions written to {output_path} ({len(out)} rows)")
+    print(f"Predictions written to {output_path} ({len(out)} rows, threshold={threshold:.4f})")
     return out
 
 
