@@ -8,4 +8,5 @@ scipy==1.15.1
 scikit-learn==1.6.1
 pyspark==3.5.5
 optuna==3.6.1
+evidently==0.4.40
 python-dateutil==2.9.0.post0
