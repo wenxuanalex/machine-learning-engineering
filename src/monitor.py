@@ -1,7 +1,13 @@
-"""Evidently drift monitoring report.
+"""Evidently drift monitoring report + bias drift segment analysis.
 
 Compares training data (reference) against the weekly inference batch (current)
-and generates an HTML report covering data drift, target drift, and data quality.
+and generates two artefacts:
+
+1. drift_report_YYYYMMDD.html  — Evidently report: data drift, target drift, data quality
+2. bias_drift_YYYYMMDD.html    — Segment-level churn rate comparison across CRM dimensions
+                                  (company_size, region, vertical, onboard_channel)
+                                  to detect whether predictions are drifting unfairly
+                                  for specific customer subgroups.
 
 Usage:
     python src/monitor.py
@@ -65,6 +71,14 @@ def _load_reference(train_path: str) -> pd.DataFrame:
     return _strip_non_features(df, retain={"is_churn_label"})
 
 
+# Segments used for bias drift analysis — CRM dimensions that could mask
+# unfair prediction shifts across customer subgroups.
+BIAS_SEGMENTS: list[str] = ["company_size", "region", "vertical", "onboard_channel"]
+
+# Delta threshold above which a segment's churn rate shift is flagged as a potential bias drift.
+BIAS_ALERT_THRESHOLD = 0.10
+
+
 def _load_current(feature_store_path: str, predictions_path: str) -> pd.DataFrame:
     """Load the weekly inference batch.
 
@@ -95,6 +109,77 @@ def _build_column_mapping(df: pd.DataFrame) -> ColumnMapping:
     )
 
 
+def generate_bias_drift_report(
+    reference: pd.DataFrame,
+    current: pd.DataFrame,
+    output_dir: str,
+) -> str:
+    """Compare churn rates per segment between reference and current.
+
+    For each CRM segment column, computes the churn rate (mean of is_churn_label)
+    per group in both reference and current, then flags groups whose rate has shifted
+    by more than BIAS_ALERT_THRESHOLD. Writes a standalone HTML table to output_dir.
+    """
+    rows = []
+    for segment in BIAS_SEGMENTS:
+        if segment not in reference.columns or segment not in current.columns:
+            continue
+        ref_rates = reference.groupby(segment)["is_churn_label"].mean().rename("ref_churn_rate")
+        cur_rates = current.groupby(segment)["is_churn_label"].mean().rename("cur_churn_rate")
+        merged = pd.concat([ref_rates, cur_rates], axis=1).dropna()
+        merged["delta"] = merged["cur_churn_rate"] - merged["ref_churn_rate"]
+        merged["alert"] = merged["delta"].abs() > BIAS_ALERT_THRESHOLD
+        merged["segment"] = segment
+        merged.index.name = "group"
+        rows.append(merged.reset_index())
+
+    if not rows:
+        return ""
+
+    results = pd.concat(rows, ignore_index=True)[
+        ["segment", "group", "ref_churn_rate", "cur_churn_rate", "delta", "alert"]
+    ]
+
+    def _fmt_pct(v: float) -> str:
+        return f"{v:.1%}"
+
+    def _row_style(row: pd.Series) -> list[str]:
+        colour = "background-color: #ffe0e0" if row["alert"] else ""
+        return [colour] * len(row)
+
+    styled = (
+        results.style
+        .format({"ref_churn_rate": _fmt_pct, "cur_churn_rate": _fmt_pct, "delta": _fmt_pct})
+        .apply(_row_style, axis=1)
+        .set_caption(
+            f"Bias Drift — segment churn rate shift (reference vs current) | "
+            f"alert threshold: ±{BIAS_ALERT_THRESHOLD:.0%}"
+        )
+    )
+
+    n_alerts = int(results["alert"].sum())
+    summary = (
+        f"<p><strong>{n_alerts} segment(s) exceed the ±{BIAS_ALERT_THRESHOLD:.0%} alert threshold.</strong> "
+        "Highlighted rows indicate potential bias drift — verify whether the shift reflects "
+        "genuine customer behaviour change or model degradation on that subgroup.</p>"
+    )
+
+    output_path = Path(output_dir) / f"bias_drift_{date.today():%Y%m%d}.html"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w") as f:
+        f.write("<html><head><meta charset='utf-8'>")
+        f.write("<style>body{font-family:Arial,sans-serif;margin:2em} table{border-collapse:collapse;width:100%} "
+                "th,td{border:1px solid #ccc;padding:6px 12px;text-align:left} "
+                "th{background:#f5f5f5}</style></head><body>")
+        f.write("<h2>Bias Drift Report</h2>")
+        f.write(summary)
+        f.write(styled.to_html())
+        f.write("</body></html>")
+
+    print(f"Bias drift report saved: {output_path} ({n_alerts} alert(s))")
+    return str(output_path)
+
+
 def generate_drift_report(
     train_path: str = "data/gold/train_labeled.parquet",
     feature_store_path: str = "data/gold/feature_store.parquet",
@@ -115,8 +200,10 @@ def generate_drift_report(
     output_path = Path(output_dir) / f"drift_report_{date.today():%Y%m%d}.html"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     report.save_html(str(output_path))
-
     print(f"Drift report saved: {output_path}")
+
+    generate_bias_drift_report(reference, current, output_dir)
+
     return str(output_path)
 
 
