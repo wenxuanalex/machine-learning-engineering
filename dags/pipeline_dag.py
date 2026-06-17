@@ -1,21 +1,25 @@
-"""Airflow DAG: Bronze -> Silver -> Gold churn data pipeline.
+"""Airflow DAG: Bronze -> Silver -> Gold -> Train -> Promote (monthly CI/CD pipeline).
 
-Wraps the existing ``utils/`` functions (the same ones ``main.py`` calls) into a
-scheduled, retryable DAG enforcing ``ingest_bronze >> clean_silver >> build_gold``
-execution order.
+Full pipeline dependency graph:
 
-Silver tasks are split into four independent operators so that macro and date-dim
-cleaning run in parallel with transactions cleaning, while CRM cleaning (which
-validates against the silver transactions table) is correctly sequenced after it.
+  ingest_bronze
+      ├─ silver_transactions ─ silver_customer_metadata ─┐
+      ├─ silver_macro ────────────────────────────────────┼─ silver_quality_gate
+      └─ silver_date_dim ─────────────────────────────────┘
+                                                           │
+                                              gold_feature_store
+                                                           │
+                                              gold_train_test_split
+                                                           │
+                                                      train_model
+                                                           │
+                                                     promote_model
 
-A data-quality gate runs after all silver tasks and before the gold layer; it
-raises ``AirflowFailException`` on row-count or null violations so the gold build
-never silently consumes bad upstream data.
+Separate weekly DAG (churn_weekly_inference in weekly_inference_dag.py):
+  run_predict -> run_monitor  (batch scoring + Evidently drift report)
 
-The task callables change the working directory to the project root so the
-``utils`` functions resolve their relative ``data/...`` paths the same way they
-do when ``main.py`` is run from the repo root. This is safe because the DAG runs
-under the SequentialExecutor (one task at a time).
+The monthly pipeline retrains and gates promotion on AUC improvement.
+The weekly pipeline scores the latest Production model and monitors for drift.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ from pathlib import Path
 import pandas as pd
 from airflow import DAG
 from airflow.exceptions import AirflowFailException
+from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
 
 from utils.bronze import ingest
@@ -43,6 +48,7 @@ log = logging.getLogger(__name__)
 
 # /opt/airflow/dags/pipeline_dag.py -> project root is the parent of dags/
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
 
 # (raw csv, bronze parquet) pairs — mirrors BRONZE_SOURCES in main.py
 BRONZE_SOURCES = [
@@ -174,6 +180,15 @@ def gold_train_test_split() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# ML — train and promote
+# ---------------------------------------------------------------------------
+
+def _ml_env() -> dict:
+    """Environment passed to ML BashOperators: sets MLflow URI and PYTHONPATH."""
+    return {"MLFLOW_TRACKING_URI": MLFLOW_URI, "PYTHONPATH": str(PROJECT_ROOT)}
+
+
+# ---------------------------------------------------------------------------
 # DAG definition
 # ---------------------------------------------------------------------------
 
@@ -209,15 +224,29 @@ with DAG(
     t_gold_features = PythonOperator(task_id="gold_feature_store", python_callable=gold_feature_store)
     t_gold_splits = PythonOperator(task_id="gold_train_test_split", python_callable=gold_train_test_split)
 
+    # ML tasks — train then gate promotion on AUC improvement
+    t_train = BashOperator(
+        task_id="train_model",
+        bash_command="python src/train.py",
+        env=_ml_env(),
+        cwd=str(PROJECT_ROOT),
+    )
+    t_promote = BashOperator(
+        task_id="promote_model",
+        bash_command="python src/promote.py",
+        env=_ml_env(),
+        cwd=str(PROJECT_ROOT),
+    )
+
     # Dependency graph:
     #
     #                      ┌─ t_silver_tx ─┐
     #                      │               └─ t_silver_crm ─┐
-    # t_bronze ────────────┤                                 ├─ t_quality_gate ─ t_gold_features ─ t_gold_splits
+    # t_bronze ────────────┤                                 ├─ t_quality_gate ─ t_gold_features ─ t_gold_splits ─ t_train ─ t_promote
     #                      ├─ t_silver_macro ───────────────┤
     #                      └─ t_silver_date ────────────────┘
     #
     t_bronze >> [t_silver_tx, t_silver_macro, t_silver_date]
     t_silver_tx >> t_silver_crm
     [t_silver_crm, t_silver_macro, t_silver_date] >> t_quality_gate
-    t_quality_gate >> t_gold_features >> t_gold_splits
+    t_quality_gate >> t_gold_features >> t_gold_splits >> t_train >> t_promote
