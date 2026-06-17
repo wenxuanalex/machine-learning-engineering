@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 
 import mlflow
-import mlflow.pyfunc
+import mlflow.sklearn
 import pandas as pd
 from sklearn.metrics import roc_auc_score
 
@@ -31,12 +31,13 @@ NON_FEATURE_COLS = {
 }
 
 
-def _evaluate(model: mlflow.pyfunc.PyFuncModel, df: pd.DataFrame) -> float:
+def _evaluate(model_uri: str, df: pd.DataFrame) -> float:
+    model = mlflow.sklearn.load_model(model_uri)
     feature_cols = [
         c for c in df.columns
         if c not in NON_FEATURE_COLS and str(df[c].dtype) != "datetime64[ms]"
     ]
-    return roc_auc_score(df[TARGET], model.predict(df[feature_cols]))
+    return roc_auc_score(df[TARGET], model.predict_proba(df[feature_cols])[:, 1])
 
 
 def promote_if_better(test_path: str = "data/gold/test_labeled.parquet") -> None:
@@ -58,8 +59,8 @@ def promote_if_better(test_path: str = "data/gold/test_labeled.parquet") -> None
         print("No Staging model found. Nothing to promote.")
         return
 
-    staging_model = mlflow.pyfunc.load_model(f"models:/{MODEL_NAME}@Staging")
-    staging_auc = _evaluate(staging_model, test_df)
+    staging_uri = f"models:/{MODEL_NAME}@Staging"
+    staging_auc = _evaluate(staging_uri, test_df)
 
     ts = pd.Timestamp.utcnow().strftime("%Y%m%d_%H%M%S")
 
@@ -68,8 +69,7 @@ def promote_if_better(test_path: str = "data/gold/test_labeled.parquet") -> None
         mlflow.log_param("staging_version", staging_version)
 
         if production_version:
-            prod_model = mlflow.pyfunc.load_model(f"models:/{MODEL_NAME}@Production")
-            prod_auc = _evaluate(prod_model, test_df)
+            prod_auc = _evaluate(f"models:/{MODEL_NAME}@Production", test_df)
             delta = staging_auc - prod_auc
 
             mlflow.log_metric("production_auc_roc", prod_auc)

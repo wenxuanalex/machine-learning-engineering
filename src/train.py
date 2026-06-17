@@ -27,6 +27,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     average_precision_score,
     f1_score,
+    precision_recall_curve,
     precision_score,
     recall_score,
     roc_auc_score,
@@ -96,6 +97,13 @@ def make_pipeline(classifier, feature_cols: list[str]) -> Pipeline:
     ])
 
 
+def find_optimal_threshold(y_true: pd.Series, y_proba) -> float:
+    """Return the threshold on y_proba that maximises F1 on the given split."""
+    precisions, recalls, thresholds = precision_recall_curve(y_true, y_proba)
+    f1s = 2 * precisions[:-1] * recalls[:-1] / (precisions[:-1] + recalls[:-1] + 1e-9)
+    return float(thresholds[f1s.argmax()])
+
+
 def compute_metrics(y_true: pd.Series, y_pred, y_proba) -> dict:
     return {
         "auc_roc": roc_auc_score(y_true, y_proba),
@@ -123,6 +131,16 @@ def train_and_log(
         y_pred = pipeline.predict(X_val)
         metrics = compute_metrics(y_val, y_pred, y_proba)
         mlflow.log_metrics(metrics)
+
+        opt_thresh = find_optimal_threshold(y_val, y_proba)
+        y_pred_opt = (y_proba >= opt_thresh).astype(int)
+        mlflow.log_param("optimal_threshold", round(opt_thresh, 4))
+        mlflow.log_metrics({
+            "f1_at_optimal_threshold": f1_score(y_val, y_pred_opt),
+            "precision_at_optimal_threshold": precision_score(y_val, y_pred_opt),
+            "recall_at_optimal_threshold": recall_score(y_val, y_pred_opt),
+        })
+
         signature = mlflow.models.infer_signature(X_train, y_proba)
         mlflow.sklearn.log_model(pipeline, "model", signature=signature)
         mlflow.log_param("feature_cols", ",".join(feature_cols))
@@ -170,6 +188,15 @@ def tune_gbm(
         y_pred = best_pipe.predict(X_val)
         metrics = compute_metrics(y_val, y_pred, y_proba)
         mlflow.log_metrics(metrics)
+
+        opt_thresh = find_optimal_threshold(y_val, y_proba)
+        y_pred_opt = (y_proba >= opt_thresh).astype(int)
+        mlflow.log_param("optimal_threshold", round(opt_thresh, 4))
+        mlflow.log_metrics({
+            "f1_at_optimal_threshold": f1_score(y_val, y_pred_opt),
+            "precision_at_optimal_threshold": precision_score(y_val, y_pred_opt),
+            "recall_at_optimal_threshold": recall_score(y_val, y_pred_opt),
+        })
 
         signature = mlflow.models.infer_signature(X_train, y_proba)
         mlflow.sklearn.log_model(best_pipe, "model", signature=signature)
