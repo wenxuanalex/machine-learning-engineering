@@ -19,6 +19,35 @@ a binary classifier that produces a churn probability score per customer.
 - `eda/` — exploratory data analysis notebooks
 to be added: data engineering, backend, frontend, llm eng
 
+## Run Airflow (Local)
+
+This project defines Airflow under the optional Compose profile.
+
+1. Build Airflow image (one-time, or when dependencies change):
+	- `docker-compose --profile optional build airflow`
+2. Start Airflow:
+	- `docker-compose --profile optional up -d airflow`
+2. Open Airflow UI:
+	- `http://127.0.0.1:8080`
+3. Log in with:
+	- Username: `admin`
+	- Password: `admin`
+
+The Airflow service startup command enforces `admin`/`admin` on each start,
+so credentials stay deterministic across restarts.
+
+Note: Airflow dependencies are baked into `Dockerfile.airflow`, so restarts are
+much faster and avoid the long startup install phase that can temporarily return
+`ERR_EMPTY_RESPONSE`.
+
+If you changed Airflow environment variables in `docker-compose.yaml`, recreate the service:
+- `docker-compose --profile optional up -d --force-recreate airflow`
+
+Useful commands:
+- `docker-compose ps`
+- `docker-compose logs airflow --tail 120`
+- `docker-compose --profile optional down`
+
 ## Gold Layer (G1) Feature Store
 
 Gold output is written to `data/gold/feature_store.parquet` with one row per modelable customer.

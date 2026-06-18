@@ -30,10 +30,17 @@ services:
       - ./mlruns:/app/mlruns
     environment:
       - PYTHONPATH=/app
-    command: ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000", "--backend-store-uri", "file:/app/mlruns", "--default-artifact-root", "file:/app/mlruns"]
+    command:
+      - bash
+      - -lc
+      - |
+        umask 0002
+        exec mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri file:/app/mlruns --serve-artifacts --artifacts-destination file:/app/mlruns
 
   airflow:
-    image: apache/airflow:2.9.3
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
     profiles: ["optional"]
     ports:
       - "8080:8080"
@@ -41,15 +48,27 @@ services:
       - AIRFLOW__CORE__LOAD_EXAMPLES=false
       - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
+      - _AIRFLOW_WWW_USER_USERNAME=admin
+      - _AIRFLOW_WWW_USER_PASSWORD=admin
       # Make the project's `utils` package importable from the DAG
       - PYTHONPATH=/opt/airflow
-      # The base Airflow image ships neither scikit-learn nor pyarrow, both of
-      # which the gold pipeline needs. Pin to match requirements.txt.
-      - _PIP_ADDITIONAL_REQUIREMENTS=pandas==2.2.3 numpy==1.26.4 scikit-learn==1.6.1 pyarrow
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
       # The DAG tasks chdir to /opt/airflow and call the same utils as main.py,
       # reading and writing the data layers in place.
       - ./utils:/opt/airflow/utils
       - ./data:/opt/airflow/data
-    command: ["airflow", "standalone"]
+      - ./mlruns:/app/mlruns
+    command:
+      - bash
+      - -c
+      - |
+        chmod -R a+rwx /app/mlruns || true
+        airflow db migrate
+        if airflow users list | grep -qE '^[[:space:]]*[0-9]+[[:space:]]*\|[[:space:]]*admin[[:space:]]*\|'; then
+          airflow users reset-password --username admin --password admin
+        else
+          airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com
+        fi
+        exec airflow standalone
