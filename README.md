@@ -1,4 +1,4 @@
-# Customer Churn Prediction — MLOps Pipeline
+﻿# Customer Churn Prediction — MLOps Pipeline
 
 Binary churn classifier for a UK online retailer. Flags at-risk customers weekly so the business can intervene before they leave.
 
@@ -71,6 +71,36 @@ Raw CSVs → Bronze (parquet) → Silver (cleaned) → Gold (feature store)
 
 ---
 
+## Run Airflow (Local)
+
+This project defines Airflow under the optional Compose profile.
+
+1. Build Airflow image (one-time, or when dependencies change):
+- `docker-compose --profile optional build airflow`
+2. Start Airflow:
+- `docker-compose --profile optional up -d airflow`
+2. Open Airflow UI:
+- `http://127.0.0.1:8080`
+3. Log in with:
+- Username: `admin`
+- Password: `admin`
+
+The Airflow service startup command enforces `admin`/`admin` on each start,
+so credentials stay deterministic across restarts.
+
+Note: Airflow dependencies are baked into `Dockerfile.airflow`, so restarts are
+much faster and avoid the long startup install phase that can temporarily return
+`ERR_EMPTY_RESPONSE`.
+
+If you changed Airflow environment variables in `docker-compose.yaml`, recreate the service:
+- `docker-compose --profile optional up -d --force-recreate airflow`
+
+Useful commands:
+- `docker-compose ps`
+- `docker-compose logs airflow --tail 120`
+- `docker-compose --profile optional down`
+
+
 ## Repository Structure
 
 ```
@@ -107,7 +137,7 @@ One row per modelable customer. Written to `data/gold/feature_store.parquet`.
 
 `is_churn_label = 1` if no purchase in label window. Macro features lagged by 1 month to prevent leakage.
 
-**Features:** recency, frequency, monetary, avg_basket_size, avg_order_interarrival_days, product_diversity, cancellation_rate, rolling_30/60/90d_spend, CRM dimensions (company_size, vertical, region, onboard_channel, account_manager), credit/payment terms, macro indicators (FTSE, GDP, CPI, etc.)
+**Features:** recency, frequency, monetary, avg_basket_size, avg_orderinterarrival_days, product_diversity, cancellation_rate, rolling_30/60/90d_spend, CRM dimensions (company_size, vertical, region, onboard_channel, account_manager), credit/payment terms, macro indicators (FTSE, GDP, CPI, etc.)
 
 ---
 
