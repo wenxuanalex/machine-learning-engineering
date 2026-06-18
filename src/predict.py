@@ -20,8 +20,12 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+import matplotlib
+matplotlib.use("Agg")  # must be set before pyplot import — required in headless/Docker environments
+import matplotlib.pyplot as plt
 import mlflow.sklearn
 import mlflow.tracking
+import numpy as np
 import pandas as pd
 
 MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
@@ -57,6 +61,61 @@ def _assign_risk_tier(proba: pd.Series) -> pd.Series:
     ).astype(str)
 
 
+def _log_shap_attribution(model, features: pd.DataFrame, output_dir: str) -> None:
+    """Compute mean |SHAP| values and save a bar chart for feature attribution tracking.
+
+    Called on every weekly inference run so attribution shifts are visible over time.
+    Supports GradientBoosting, RandomForest (TreeExplainer) and LogisticRegression
+    (LinearExplainer). Fails silently so it never blocks the inference pipeline.
+    """
+    try:
+        import shap
+        from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+        from sklearn.linear_model import LogisticRegression
+
+        clf = model.named_steps["clf"]
+        preprocessor = model.named_steps["preprocessor"]
+
+        sample = features.sample(min(200, len(features)), random_state=42)
+        X_transformed = preprocessor.transform(sample)
+
+        try:
+            feature_names = list(preprocessor.get_feature_names_out())
+        except AttributeError:
+            feature_names = [f"f{i}" for i in range(X_transformed.shape[1])]
+
+        if isinstance(clf, (GradientBoostingClassifier, RandomForestClassifier)):
+            explainer = shap.TreeExplainer(clf)
+            raw = explainer.shap_values(X_transformed)
+            # RandomForest returns [neg_class, pos_class]; GBM returns 2-D array directly
+            shap_vals = raw[1] if isinstance(raw, list) else raw
+        elif isinstance(clf, LogisticRegression):
+            explainer = shap.LinearExplainer(clf, X_transformed)
+            shap_vals = explainer.shap_values(X_transformed)
+        else:
+            print(f"SHAP: unsupported classifier type {type(clf).__name__}, skipping.")
+            return
+
+        mean_abs = pd.Series(
+            np.abs(shap_vals).mean(axis=0), index=feature_names
+        ).sort_values(ascending=True).tail(20)
+
+        fig, ax = plt.subplots(figsize=(8, max(4, len(mean_abs) * 0.35)))
+        mean_abs.plot(kind="barh", ax=ax, color="steelblue")
+        ax.set_xlabel("Mean |SHAP value|")
+        ax.set_title(f"Feature Attribution — {datetime.now(timezone.utc).strftime('%Y-%m-%d')}")
+        plt.tight_layout()
+
+        out_path = Path(output_dir) / f"shap_attribution_{datetime.now(timezone.utc).strftime('%Y%m%d')}.png"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(out_path, dpi=100)
+        plt.close(fig)
+        print(f"SHAP attribution saved: {out_path}")
+        print(f"Top 5 features: {mean_abs.tail(5).index[::-1].tolist()}")
+    except Exception as exc:
+        print(f"SHAP attribution skipped: {exc}")
+
+
 def batch_predict(input_path: str, output_path: str) -> pd.DataFrame:
     mlflow.set_tracking_uri(MLFLOW_URI)
     client = mlflow.tracking.MlflowClient()
@@ -90,6 +149,8 @@ def batch_predict(input_path: str, output_path: str) -> pd.DataFrame:
     out[["customer_id", "churn_probability", "risk_tier"]].to_csv(csv_path, index=False)
     print(f"Churn scores written to {csv_path}")
     print(out["risk_tier"].value_counts().to_string())
+
+    _log_shap_attribution(model, features, str(Path(output_path).parent))
 
     return out
 

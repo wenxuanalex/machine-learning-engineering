@@ -1,4 +1,4 @@
-services:
+﻿services:
   jupyter:
     build: .
     ports:
@@ -72,3 +72,17 @@ services:
           airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com
         fi
         exec airflow standalone
+
+  serve:
+    build: .
+    profiles: ["optional"]
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./mlruns:/app/mlruns
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - PYTHONPATH=/app
+    depends_on:
+      - mlflow
+    command: ["mlflow", "models", "serve", "-m", "models:/ChurnModel@Production", "-h", "0.0.0.0", "-p", "5001", "--env-manager", "local"]

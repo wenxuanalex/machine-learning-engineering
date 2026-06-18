@@ -13,6 +13,7 @@ been produced by the monthly pipeline before the weekly window fires.
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -20,6 +21,12 @@ from airflow import DAG
 from airflow.operators.bash import BashOperator
 
 PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
+MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+
+
+def _ml_env() -> dict:
+    return {"MLFLOW_TRACKING_URI": MLFLOW_URI, "PYTHONPATH": PROJECT_ROOT}
+
 
 default_args = {
     "owner": "mlops",
@@ -45,6 +52,7 @@ with DAG(
             "--input data/gold/feature_store.parquet "
             "--output reports/predictions.parquet"
         ),
+        env=_ml_env(),
         cwd=PROJECT_ROOT,
     )
 
@@ -57,6 +65,7 @@ with DAG(
             "--predictions reports/predictions.parquet "
             "--output-dir reports"
         ),
+        env=_ml_env(),
         cwd=PROJECT_ROOT,
     )
 
