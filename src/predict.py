@@ -21,13 +21,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import matplotlib
+matplotlib.use("Agg")  # must be set before pyplot import — required in headless/Docker environments
 import matplotlib.pyplot as plt
 import mlflow.sklearn
 import mlflow.tracking
 import numpy as np
 import pandas as pd
-
-matplotlib.use("Agg")
 
 MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
 MODEL_NAME = "ChurnModel"

@@ -15,7 +15,7 @@ Usage:
     python src/monitor.py \\
         --train data/gold/train_labeled.parquet \\
         --feature-store data/gold/feature_store.parquet \\
-        --predictions data/gold/predictions.parquet \\
+        --predictions reports/predictions.parquet \\
         --output-dir reports
 """
 
@@ -183,7 +183,7 @@ def generate_bias_drift_report(
 def generate_drift_report(
     train_path: str = "data/gold/train_labeled.parquet",
     feature_store_path: str = "data/gold/feature_store.parquet",
-    predictions_path: str = "data/gold/predictions.parquet",
+    predictions_path: str = "reports/predictions.parquet",
     output_dir: str = "reports",
 ) -> str:
     reference = _load_reference(train_path)
@@ -211,7 +211,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate Evidently drift monitoring report")
     parser.add_argument("--train", default="data/gold/train_labeled.parquet")
     parser.add_argument("--feature-store", default="data/gold/feature_store.parquet")
-    parser.add_argument("--predictions", default="data/gold/predictions.parquet")
+    parser.add_argument("--predictions", default="reports/predictions.parquet")
     parser.add_argument("--output-dir", default="reports")
     args = parser.parse_args()
     generate_drift_report(
