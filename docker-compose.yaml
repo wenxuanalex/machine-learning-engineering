@@ -48,10 +48,10 @@ services:
       - _PIP_ADDITIONAL_REQUIREMENTS=pandas==2.2.3 numpy==1.26.4 scikit-learn==1.6.1 pyarrow mlflow evidently==0.4.40 optuna==3.6.1 shap==0.46.0
     volumes:
       - ./dags:/opt/airflow/dags
-      # The DAG tasks chdir to /opt/airflow and call the same utils as main.py,
-      # reading and writing the data layers in place.
+      - ./src:/opt/airflow/src
       - ./utils:/opt/airflow/utils
       - ./data:/opt/airflow/data
+      - ./reports:/opt/airflow/reports
     command: ["airflow", "standalone"]
 
   serve:
