@@ -35,6 +35,8 @@ jobs:
         run: |
           mkdir -p data/bronze data/silver data/gold
           python main.py
+          # Standardize timestamps required by tests
+          python scripts/standardize_timestamps.py
 
       - name: Ruff lint
         run: |
