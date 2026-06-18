@@ -45,7 +45,7 @@ services:
       - PYTHONPATH=/opt/airflow
       # The base Airflow image ships neither scikit-learn nor pyarrow, both of
       # which the gold pipeline needs. Pin to match requirements.txt.
-      - _PIP_ADDITIONAL_REQUIREMENTS=pandas==2.2.3 numpy==1.26.4 scikit-learn==1.6.1 pyarrow mlflow evidently==0.4.40 optuna==3.6.1 shap==0.46.0
+      - _PIP_ADDITIONAL_REQUIREMENTS=pandas==2.2.3 numpy==1.26.4 scikit-learn==1.6.1 pyarrow mlflow==2.14.3 evidently==0.4.40 optuna==3.6.1 shap==0.46.0
     volumes:
       - ./dags:/opt/airflow/dags
       - ./src:/opt/airflow/src
