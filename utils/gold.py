@@ -4,6 +4,16 @@ import numpy as np
 import pandas as pd
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _resolve_path(path_value: str) -> Path:
+    path = Path(path_value)
+    if path.is_absolute():
+        return path
+    return PROJECT_ROOT / path
+
+
 def _as_timestamp(value: str) -> pd.Timestamp:
     return pd.Timestamp(value)
 
@@ -153,6 +163,12 @@ def build_gold_feature_store(
     auxiliary_lag_months: int | None = None,
 ) -> dict:
     """Build one-row-per-customer gold feature store with churn labels."""
+    silver_tx_path = _resolve_path(silver_tx_parquet)
+    bronze_tx_path = _resolve_path(bronze_tx_parquet)
+    silver_crm_path = _resolve_path(silver_crm_parquet)
+    silver_macro_path = _resolve_path(silver_macro_parquet)
+    dest_path = _resolve_path(dest_parquet)
+
     obs_start_ts = _as_timestamp(obs_start)
     obs_end_ts = _as_timestamp(obs_end)
     label_start_ts = _as_timestamp(label_start)
@@ -160,7 +176,7 @@ def build_gold_feature_store(
     if auxiliary_lag_months is None:
         auxiliary_lag_months = macro_lag_months
 
-    silver_tx = pd.read_parquet(silver_tx_parquet).copy()
+    silver_tx = pd.read_parquet(silver_tx_path).copy()
     silver_tx["invoice_date"] = pd.to_datetime(silver_tx["invoice_date"], errors="coerce")
 
     obs_tx = silver_tx[
@@ -173,7 +189,7 @@ def build_gold_feature_store(
     rfm_behavior = _build_rfm_and_behavior(obs_tx=obs_tx, obs_end=obs_end_ts)
     rolling = _build_rolling_spend(obs_tx=obs_tx, obs_end=obs_end_ts)
 
-    bronze_tx = pd.read_parquet(bronze_tx_parquet)
+    bronze_tx = pd.read_parquet(bronze_tx_path)
     cancellation = _build_cancellation_rate(
         bronze_tx=bronze_tx,
         obs_start=obs_start_ts,
@@ -188,8 +204,8 @@ def build_gold_feature_store(
         modelable_customers=modelable_customers,
     )
 
-    crm = pd.read_parquet(silver_crm_parquet)
-    macro = pd.read_parquet(silver_macro_parquet)
+    crm = pd.read_parquet(silver_crm_path)
+    macro = pd.read_parquet(silver_macro_path)
     macro_values = _macro_snapshot(macro, obs_end=obs_end_ts, macro_lag_months=macro_lag_months)
     auxiliary_snapshot_month = _auxiliary_snapshot_month(obs_end_ts, auxiliary_lag_months)
 
@@ -218,8 +234,8 @@ def build_gold_feature_store(
     # in_transactions is a silver diagnostic flag, not a model feature
     feature_store = feature_store.drop(columns=["in_transactions"], errors="ignore")
 
-    Path(dest_parquet).parent.mkdir(parents=True, exist_ok=True)
-    feature_store.to_parquet(dest_parquet, index=False)
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    feature_store.to_parquet(dest_path, index=False)
 
     feature_list = [
         "recency",
@@ -235,7 +251,7 @@ def build_gold_feature_store(
     ]
 
     return {
-        "destination": dest_parquet,
+        "destination": str(dest_path),
         "rows": len(feature_store),
         "modelable_customers": len(modelable_customers),
         "observation_window": f"{obs_start_ts.date()} to {obs_end_ts.date()}",
@@ -287,7 +303,12 @@ def build_gold_train_test_split(
     test_path: str = "data/gold/test_labeled.parquet",
 ) -> dict:
     """Split the gold feature store into train, validation, and test sets."""
-    features = pd.read_parquet(feature_store_path)
+    feature_store_resolved = _resolve_path(feature_store_path)
+    train_resolved = _resolve_path(train_path)
+    val_resolved = _resolve_path(val_path)
+    test_resolved = _resolve_path(test_path)
+
+    features = pd.read_parquet(feature_store_resolved)
 
     train, val, test = _build_churn_label_and_split(
         features=features,
@@ -296,17 +317,17 @@ def build_gold_train_test_split(
         random_state=random_state,
     )
 
-    Path(train_path).parent.mkdir(parents=True, exist_ok=True)
-    train.to_parquet(train_path, index=False)
-    val.to_parquet(val_path, index=False)
-    test.to_parquet(test_path, index=False)
+    train_resolved.parent.mkdir(parents=True, exist_ok=True)
+    train.to_parquet(train_resolved, index=False)
+    val.to_parquet(val_resolved, index=False)
+    test.to_parquet(test_resolved, index=False)
 
     churn_rate = features["is_churn_label"].mean()
 
     return {
-        "train_path": train_path,
-        "val_path": val_path,
-        "test_path": test_path,
+        "train_path": str(train_resolved),
+        "val_path": str(val_resolved),
+        "test_path": str(test_resolved),
         "train_rows": len(train),
         "val_rows": len(val),
         "test_rows": len(test),
