@@ -42,6 +42,8 @@ NON_FEATURE_COLS = {
     "is_active_label",
     "scoring_date",
     "macro_lag_months",
+    "auxiliary_lag_months",
+    "auxiliary_snapshot_month",
 }
 
 

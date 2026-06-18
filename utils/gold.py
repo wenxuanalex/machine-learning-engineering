@@ -135,6 +135,10 @@ def _macro_snapshot(
     return {f"macro_{k}": v for k, v in record.items() if k != "year_month"}
 
 
+def _auxiliary_snapshot_month(obs_end: pd.Timestamp, lag_months: int) -> str:
+    return (obs_end.to_period("M") - lag_months).strftime("%Y-%m")
+
+
 def build_gold_feature_store(
     silver_tx_parquet: str = "data/silver/transactions.parquet",
     bronze_tx_parquet: str = "data/bronze/transactions.parquet",
@@ -146,12 +150,15 @@ def build_gold_feature_store(
     label_start: str = "2011-09-01",
     label_end: str = "2011-12-31",
     macro_lag_months: int = 1,
+    auxiliary_lag_months: int | None = None,
 ) -> dict:
     """Build one-row-per-customer gold feature store with churn labels."""
     obs_start_ts = _as_timestamp(obs_start)
     obs_end_ts = _as_timestamp(obs_end)
     label_start_ts = _as_timestamp(label_start)
     label_end_ts = _as_timestamp(label_end)
+    if auxiliary_lag_months is None:
+        auxiliary_lag_months = macro_lag_months
 
     silver_tx = pd.read_parquet(silver_tx_parquet).copy()
     silver_tx["invoice_date"] = pd.to_datetime(silver_tx["invoice_date"], errors="coerce")
@@ -184,6 +191,7 @@ def build_gold_feature_store(
     crm = pd.read_parquet(silver_crm_parquet)
     macro = pd.read_parquet(silver_macro_parquet)
     macro_values = _macro_snapshot(macro, obs_end=obs_end_ts, macro_lag_months=macro_lag_months)
+    auxiliary_snapshot_month = _auxiliary_snapshot_month(obs_end_ts, auxiliary_lag_months)
 
     feature_store = (
         customer_frame.merge(rfm_behavior, on="customer_id", how="left")
@@ -202,6 +210,8 @@ def build_gold_feature_store(
 
     feature_store["scoring_date"] = obs_end_ts
     feature_store["macro_lag_months"] = macro_lag_months
+    feature_store["auxiliary_lag_months"] = auxiliary_lag_months
+    feature_store["auxiliary_snapshot_month"] = auxiliary_snapshot_month
     for key, value in macro_values.items():
         feature_store[key] = value
 
@@ -231,6 +241,8 @@ def build_gold_feature_store(
         "observation_window": f"{obs_start_ts.date()} to {obs_end_ts.date()}",
         "label_window": f"{label_start_ts.date()} to {label_end_ts.date()}",
         "macro_snapshot_month": (obs_end_ts.to_period("M") - macro_lag_months).strftime("%Y-%m"),
+        "auxiliary_snapshot_month": auxiliary_snapshot_month,
+        "auxiliary_lag_months": auxiliary_lag_months,
         "feature_list": feature_list,
         "label_rate_churn": round(float(feature_store["is_churn_label"].mean()), 4),
     }
