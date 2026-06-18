@@ -27,6 +27,7 @@ MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
 def _ml_env() -> dict:
     return {"MLFLOW_TRACKING_URI": MLFLOW_URI, "PYTHONPATH": PROJECT_ROOT}
 
+
 default_args = {
     "owner": "mlops",
     "retries": 1,
