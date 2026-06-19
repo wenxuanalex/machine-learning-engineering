@@ -44,3 +44,10 @@ def test_gold_has_lagged_macro_columns(gold_df):
     assert "macro_lag_months" in gold_df.columns
     assert "macro_ftse_monthly_return" in gold_df.columns
     assert (gold_df["macro_lag_months"] == 1).all()
+
+
+def test_gold_has_lagged_auxiliary_metadata(gold_df):
+    assert "auxiliary_lag_months" in gold_df.columns
+    assert "auxiliary_snapshot_month" in gold_df.columns
+    assert (gold_df["auxiliary_lag_months"] == 1).all()
+    assert (gold_df["auxiliary_snapshot_month"] == "2011-07").all()
