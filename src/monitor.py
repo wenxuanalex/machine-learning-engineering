@@ -14,7 +14,7 @@ Usage:
 
     python src/monitor.py \\
         --train data/gold/train_labeled.parquet \\
-        --feature-store data/gold/feature_store.parquet \\
+        --feature-store data/gold/test_labeled.parquet \\
         --predictions reports/predictions.parquet \\
         --output-dir reports
 """
@@ -182,7 +182,12 @@ def generate_bias_drift_report(
 
 def generate_drift_report(
     train_path: str = "data/gold/train_labeled.parquet",
-    feature_store_path: str = "data/gold/feature_store.parquet",
+    # The dataset is a single point-in-time snapshot, so there is no genuinely
+    # "later" production batch to score. We use the held-out test split as the
+    # current batch: it is disjoint from the training reference (no row overlap),
+    # so the drift comparison is meaningful rather than train-vs-superset-of-train.
+    # In production this would point at each new weekly scoring batch instead.
+    feature_store_path: str = "data/gold/test_labeled.parquet",
     predictions_path: str = "reports/predictions.parquet",
     output_dir: str = "reports",
 ) -> str:
@@ -210,7 +215,7 @@ def generate_drift_report(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate Evidently drift monitoring report")
     parser.add_argument("--train", default="data/gold/train_labeled.parquet")
-    parser.add_argument("--feature-store", default="data/gold/feature_store.parquet")
+    parser.add_argument("--feature-store", default="data/gold/test_labeled.parquet")
     parser.add_argument("--predictions", default="reports/predictions.parquet")
     parser.add_argument("--output-dir", default="reports")
     args = parser.parse_args()

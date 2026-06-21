@@ -61,7 +61,10 @@ with DAG(
         bash_command=(
             "python src/monitor.py "
             "--train data/gold/train_labeled.parquet "
-            "--feature-store data/gold/feature_store.parquet "
+            # Held-out test split as the current batch — disjoint from the train
+            # reference so drift is meaningful (single-snapshot dataset has no
+            # genuinely later batch; in production this is the new weekly batch).
+            "--feature-store data/gold/test_labeled.parquet "
             "--predictions reports/predictions.parquet "
             "--output-dir reports"
         ),
