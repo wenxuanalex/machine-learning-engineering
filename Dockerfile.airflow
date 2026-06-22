@@ -1,0 +1,13 @@
+FROM apache/airflow:2.9.3
+
+# Preinstall ML pipeline dependencies so Airflow startup does not spend minutes
+# installing packages on every container recreate.
+RUN pip install --no-cache-dir \
+    pandas==2.2.3 \
+    numpy==1.26.4 \
+    scikit-learn==1.6.1 \
+    pyarrow==15.0.2 \
+    mlflow==2.14.3 \
+    optuna==3.6.1 \
+    evidently==0.4.40 \
+    shap==0.46.0

@@ -1,9 +1,63 @@
-__pycache__/
-*.pyc
-*.pyo
-.ipynb_checkpoints/
+﻿__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+*.egg
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtualenv
+.venv/
+venv/
+ENV/
+env/
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# macOS
 .DS_Store
-.env
-datamart/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# MLflow runs and artifacts
 mlruns/
-mlflow.db
+
+# Generated data files
+*.parquet
+
+# Reports and generated outputs
+reports/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+
+# Secrets (local overrides)
+.env
