@@ -149,6 +149,58 @@ def _auxiliary_snapshot_month(obs_end: pd.Timestamp, lag_months: int) -> str:
     return (obs_end.to_period("M") - lag_months).strftime("%Y-%m")
 
 
+# ---------------------------------------------------------------------------
+# Point-in-time snapshots
+# ---------------------------------------------------------------------------
+# The feature pipeline is ONE parameterised step: given an observation cut-off
+# (the scoring date) it emits a dated feature-store snapshot. Run on a schedule,
+# these snapshots accumulate over time. The earliest serves as the training
+# baseline and the drift reference; the latest is the batch we score and monitor
+# against that baseline. "Reference" and "current" are therefore just two runs of
+# the same step at different scoring dates — not two bespoke datasets.
+#
+# Each label window is the 3 months (~90 days) immediately following the
+# observation window, matching the "no purchase within 90 days" churn definition.
+# Two non-overlapping 4-month observation windows (winter vs summer) keep the
+# cohorts genuinely distinct — different customers, different seasonality — so the
+# drift report carries real, explainable signal rather than sampling noise.
+GOLD_SNAPSHOTS: dict[str, dict[str, str]] = {
+    "2011-03-31": {  # baseline / training snapshot (winter observation)
+        "obs_start": "2010-12-01", "obs_end": "2011-03-31",
+        "label_start": "2011-04-01", "label_end": "2011-06-30",
+    },
+    "2011-08-31": {  # latest / scoring + monitoring snapshot (summer observation)
+        "obs_start": "2011-05-01", "obs_end": "2011-08-31",
+        "label_start": "2011-09-01", "label_end": "2011-11-30",
+    },
+}
+TRAINING_SNAPSHOT = "2011-03-31"  # trained on + used as the drift reference
+SCORING_SNAPSHOT = "2011-08-31"   # scored + monitored against the baseline
+
+
+def snapshot_path(scoring_date: str) -> str:
+    """Dated feature-store path for a snapshot, keyed by its scoring date."""
+    return f"data/gold/feature_store_{scoring_date}.parquet"
+
+
+def build_gold_snapshots() -> dict:
+    """Build every point-in-time snapshot from the same parameterised feature step.
+
+    Calls build_gold_feature_store() once per scoring date in GOLD_SNAPSHOTS,
+    writing a dated parquet for each. Returns {scoring_date: build summary}.
+    """
+    results = {}
+    for scoring_date, w in GOLD_SNAPSHOTS.items():
+        results[scoring_date] = build_gold_feature_store(
+            dest_parquet=snapshot_path(scoring_date),
+            obs_start=w["obs_start"],
+            obs_end=w["obs_end"],
+            label_start=w["label_start"],
+            label_end=w["label_end"],
+        )
+    return results
+
+
 def build_gold_feature_store(
     silver_tx_parquet: str = "data/silver/transactions.parquet",
     bronze_tx_parquet: str = "data/bronze/transactions.parquet",
@@ -294,7 +346,7 @@ def _build_churn_label_and_split(
 
 
 def build_gold_train_test_split(
-    feature_store_path: str = "data/gold/feature_store.parquet",
+    feature_store_path: str = snapshot_path(TRAINING_SNAPSHOT),
     test_size: float = 0.15,
     val_size: float = 0.15,
     random_state: int = 42,

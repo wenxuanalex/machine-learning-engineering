@@ -49,7 +49,8 @@ with DAG(
         task_id="run_predict",
         bash_command=(
             "python src/predict.py "
-            "--input data/gold/feature_store.parquet "
+            # Score the latest snapshot (SCORING_SNAPSHOT in utils/gold.py).
+            "--input data/gold/feature_store_2011-08-31.parquet "
             "--output reports/predictions.parquet"
         ),
         env=_ml_env(),
@@ -60,11 +61,10 @@ with DAG(
         task_id="run_monitor",
         bash_command=(
             "python src/monitor.py "
+            # Reference = training snapshot; current = later scoring snapshot, so
+            # drift is a genuine earlier-vs-later comparison (see utils/gold.py).
             "--train data/gold/train_labeled.parquet "
-            # Held-out test split as the current batch — disjoint from the train
-            # reference so drift is meaningful (single-snapshot dataset has no
-            # genuinely later batch; in production this is the new weekly batch).
-            "--feature-store data/gold/test_labeled.parquet "
+            "--feature-store data/gold/feature_store_2011-08-31.parquet "
             "--predictions reports/predictions.parquet "
             "--output-dir reports"
         ),

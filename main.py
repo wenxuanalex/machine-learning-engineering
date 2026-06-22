@@ -1,6 +1,11 @@
 from utils.bronze import ingest
 from utils.silver import clean_transactions, clean_customer_metadata, clean_macro_monthly, date_dim
-from utils.gold import build_gold_feature_store, build_gold_train_test_split
+from utils.gold import (
+    TRAINING_SNAPSHOT,
+    build_gold_snapshots,
+    build_gold_train_test_split,
+    snapshot_path,
+)
 
 BRONZE_SOURCES = [
     ("data/data.csv",                               "data/bronze/transactions.parquet"),
@@ -33,17 +38,15 @@ cal_fe = date_dim()
 print(f"\n{cal_fe['source']} → {cal_fe['destination']}")
 print(f"  Rows: {cal_fe['rows']}  |  Schema: {cal_fe['schema']} ")
 
-print("\n=== Gold: Feature Store (G1) ===")
-gold_result = build_gold_feature_store()
-print(f"  Destination         : {gold_result['destination']}")
-print(f"  Rows                : {gold_result['rows']:,}")
-print(f"  Modelable customers : {gold_result['modelable_customers']:,}")
-print(f"  Observation window  : {gold_result['observation_window']}")
-print(f"  Macro snapshot month: {gold_result['macro_snapshot_month']}")
-print(f"  Features            : {', '.join(gold_result['feature_list'])}")
+print("\n=== Gold: Feature Store snapshots (G1) ===")
+snapshots = build_gold_snapshots()
+for scoring_date, snap in snapshots.items():
+    role = "training/reference" if scoring_date == TRAINING_SNAPSHOT else "scoring/current"
+    print(f"  [{scoring_date}] ({role}) -> {snap['destination']}")
+    print(f"     Rows: {snap['rows']:,}  |  Obs: {snap['observation_window']}  |  Label: {snap['label_window']}  |  Churn: {snap['label_rate_churn']:.1%}")
 
-print("\n=== Gold: Train/Test Split (G2) ===")
-split_result = build_gold_train_test_split()
+print("\n=== Gold: Train/Test Split (G2) — on the training snapshot ===")
+split_result = build_gold_train_test_split(feature_store_path=snapshot_path(TRAINING_SNAPSHOT))
 print(f"  Train path          : {split_result['train_path']}")
 print(f"  Val path            : {split_result['val_path']}")
 print(f"  Test path           : {split_result['test_path']}")
