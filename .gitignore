@@ -49,9 +49,6 @@ mlruns/
 # Generated data files
 *.parquet
 
-# Reports and generated outputs
-reports/
-
 # Logs
 *.log
 

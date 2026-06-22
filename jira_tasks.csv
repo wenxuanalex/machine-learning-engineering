@@ -1,0 +1,106 @@
+Summary,Issue Type,Epic Name,Priority,Description,Acceptance Criteria
+Epic 1: Workflow Orchestration,Epic,Epic 1: Workflow Orchestration,High,,
+Epic 2: Model Training & Registry,Epic,Epic 2: Model Training & Registry,High,,
+Epic 3: Continuous Monitoring,Epic,Epic 3: Continuous Monitoring,High,,
+Epic 4: Container & Environment Hardening,Epic,Epic 4: Container & Environment Hardening,Medium,,
+Epic 5: CI/CD Pipeline Enhancement,Epic,Epic 5: CI/CD Pipeline Enhancement,Medium,,
+Epic 6: Advanced Deployment Strategy,Epic,Epic 6: Advanced Deployment Strategy,Low,,
+Create dags/ directory and scaffold base Airflow DAG file,Story,Epic 1: Workflow Orchestration,High,"As a Data Engineer, I want a dags/ directory with a base DAG file so that Airflow can discover and load the pipeline on startup.","- dags/pipeline_dag.py exists at the repo root level
+- File is importable by Airflow without syntax or import errors
+- DAG appears in the Airflow UI when the service starts via docker compose --profile optional up airflow
+- DAG ID is churn_data_pipeline
+- default_args includes owner, retries: 2, retry_delay: 5 minutes"
+Implement Bronze ingestion Airflow task,Story,Epic 1: Workflow Orchestration,High,"As a Data Engineer, I want an Airflow task that runs the Bronze ingestion step so that raw data is loaded into the bronze/ layer on a schedule.","- A PythonOperator task with task_id ingest_bronze is defined in the DAG
+- Task calls utils/bronze.ingest() without modification to that module
+- Task runs successfully in isolation via Airflow's Test Task feature
+- On success, data/bronze/ contains transactions.parquet, customer_metadata.parquet, and ancillary.parquet"
+Implement Silver cleaning Airflow tasks,Story,Epic 1: Workflow Orchestration,High,"As a Data Engineer, I want Airflow tasks for each Silver cleaning step so that all four Silver layer outputs are produced and can be monitored individually.","- Four PythonOperator tasks exist: clean_silver_transactions, clean_silver_crm, clean_silver_macro, build_date_dim
+- Each task maps directly to its corresponding function in utils/silver.py
+- All four tasks are downstream of ingest_bronze
+- Each task can be re-run independently without affecting sibling tasks
+- On success, all expected Silver parquet files exist in data/silver/"
+Implement Gold feature store Airflow tasks,Story,Epic 1: Workflow Orchestration,High,"As a Data Engineer, I want Airflow tasks for building the Gold feature store and train/val/test splits so that the ML-ready datasets are produced as part of the automated pipeline.","- Two PythonOperator tasks exist: build_gold_feature_store and build_gold_splits
+- build_gold_feature_store is downstream of all four Silver tasks
+- build_gold_splits is downstream of build_gold_feature_store only
+- On success, data/gold/ contains feature_store.parquet, train_labeled.parquet, val_labeled.parquet, test_labeled.parquet"
+Configure DAG schedule, retries, and full dependency graph,Story,Epic 1: Workflow Orchestration,High,"As a Data Engineer, I want the DAG to run on a monthly schedule with automatic retries so that the pipeline recovers from transient failures without manual intervention.","- DAG schedule_interval is set to @monthly
+- catchup is set to False
+- All tasks inherit retries: 2 and retry_delay: 5 minutes from default_args
+- Full dependency chain enforces: bronze >> [silver tasks] >> gold_feature_store >> gold_splits
+- A manually triggered run in the Airflow UI completes all tasks with status success"
+Create training script with baseline models and MLflow logging,Story,Epic 2: Model Training & Registry,High,"As an ML Engineer, I want a training script that trains multiple baseline models and logs each run to MLflow so that all experiments are reproducible and comparable in the UI.","- src/train.py exists and runs end-to-end without errors inside the Docker container
+- At least three model variants are trained: LogisticRegression, RandomForestClassifier, and GradientBoostingClassifier
+- Each run is logged to MLflow experiment named churn_prediction
+- Each run logs params, and metrics: auc_roc, f1, avg_precision on the validation set
+- The serialised model artifact is attached to each MLflow run
+- Running docker compose run jupyter python src/train.py against existing data/gold/ splits completes without errors"
+Implement Optuna hyperparameter tuning with nested MLflow runs,Story,Epic 2: Model Training & Registry,High,"As an ML Engineer, I want Optuna hyperparameter tuning integrated into the training script so that the best hyperparameters are found systematically and every trial is traceable.","- An Optuna study runs a minimum of 20 trials for the best-performing model class
+- Each trial is logged as a nested/child MLflow run under the parent experiment run
+- The study's best_params and best_value are logged on the parent run
+- The final optimised model is fitted on the full training set using best_params and saved as an MLflow artifact"
+Register best model in MLflow Model Registry,Story,Epic 2: Model Training & Registry,High,"As an ML Engineer, I want the best model automatically registered in the MLflow Model Registry at the end of training so that it is available for downstream serving and promotion.","- The run with the highest auc_roc on the validation set is identified programmatically
+- That model is registered in the MLflow Model Registry under the name ChurnModel
+- The registered version is transitioned to stage Staging immediately after registration
+- The MLflow UI shows ChurnModel with at least one version in Staging after the training script completes"
+Create batch inference script,Story,Epic 2: Model Training & Registry,High,"As an ML Engineer, I want a batch inference script that loads the Production-staged model from MLflow and writes predictions to a parquet file so that churn scores can be generated for any customer cohort.","- src/predict.py accepts an input parquet path and an output parquet path
+- Script loads the ChurnModel at stage Production from the MLflow registry
+- Output parquet contains exactly these columns: customer_id, churn_probability, churn_prediction, predicted_at
+- Script runs inside the Docker container without network access to external services beyond the local MLflow server
+- Running the script against data/gold/test_labeled.parquet produces a valid output file"
+Wire training and inference tasks into Airflow DAG,Story,Epic 2: Model Training & Registry,High,"As a Data Engineer, I want the training and batch inference steps wired into the Airflow DAG so that model retraining and prediction generation happen automatically after the Gold layer is refreshed.","- A BashOperator or PythonOperator task train_and_register is downstream of build_gold_splits
+- The task runs src/train.py and completes successfully in the DAG
+- DAG run order enforces: gold_splits >> train_and_register
+- The task respects the same retry policy as other DAG tasks"
+Implement Evidently data drift monitoring report,Story,Epic 3: Continuous Monitoring,High,"As an ML Engineer, I want automated data drift detection using Evidently so that I am alerted when the feature distribution in a current dataset diverges from the training baseline.","- src/monitor.py exists and runs without errors inside the Docker container
+- Script generates an Evidently report covering DataDriftPreset, DataQualityPreset, and TargetDriftPreset
+- HTML report and JSON summary are saved to reports/ with a UTC timestamp in the filename
+- A boolean drift_detected value is extracted from the JSON result
+- drift_detected and n_drifted_features are logged as metrics on a dedicated MLflow monitoring run
+- Both the HTML and JSON artifacts are attached to the MLflow run"
+Implement SHAP feature attribution drift tracking,Story,Epic 3: Continuous Monitoring,High,"As an ML Engineer, I want SHAP-based feature attribution drift tracking so that silent model degradation is detected before it impacts business metrics.","- src/shap_monitor.py exists and runs without errors against the Staging ChurnModel
+- SHAP values are computed for both the reference (train) and current (val) datasets
+- Mean absolute SHAP values per feature are compared between reference and current
+- A bar chart of relative attribution change is saved to reports/shap_<timestamp>.png and logged as an MLflow artifact
+- Per-feature attribution drift percentage is logged as individual MLflow metrics
+- Any feature with relative attribution shift greater than 20% is printed to stdout as an ALERT"
+Implement automated data quality checks,Story,Epic 3: Continuous Monitoring,High,"As a Data Engineer, I want automated data quality checks that validate Silver layer outputs so that malformed data is caught before it corrupts the Gold feature store.","- src/data_quality.py exists with configurable rules per Silver table
+- Checks cover: minimum row count, no nulls in key columns, numeric range bounds, and categorical cardinality
+- A JSON quality report is written to reports/data_quality_<timestamp>.json on every run
+- If any check fails, the script raises an exception with a descriptive message listing the failed table and check
+- Running the script against valid data/silver/ parquet files exits with code 0"
+Wire data quality gate into Airflow DAG,Story,Epic 3: Continuous Monitoring,High,"As a Data Engineer, I want the data quality gate wired into the Airflow DAG between the Silver and Gold tasks so that Gold layer builds are blocked when upstream data is invalid.","- A PythonOperator task data_quality_gate is placed downstream of all Silver tasks and upstream of build_gold_feature_store
+- If data_quality.run_quality_checks() raises an exception, the DAG task fails and all downstream Gold and training tasks are not triggered
+- The quality report JSON is accessible from the task logs or written to a mounted reports/ volume"
+Wire monitoring tasks into Airflow DAG,Story,Epic 3: Continuous Monitoring,High,"As a Data Engineer, I want drift monitoring and SHAP attribution checks wired into the Airflow DAG after training so that monitoring runs automatically every pipeline cycle.","- A PythonOperator task run_drift_monitoring is downstream of train_and_register
+- Task calls src/monitor.run_monitoring() and completes successfully
+- DAG run order enforces: train_and_register >> run_drift_monitoring
+- Task failure does not block the full DAG from completing (can be set to trigger_rule=all_done if appropriate)"
+Create .dockerignore to exclude large files from build context,Story,Epic 4: Container & Environment Hardening,Medium,"As a DevOps Engineer, I want a .dockerignore file so that large data files and local artifacts are excluded from the Docker build context, reducing build time and image size.","- .dockerignore exists at the repository root
+- The following paths are excluded: data/, mlruns/, reports/, .git/, .github/, eda/, __pycache__/, *.csv, *.parquet, .env
+- docker build . completes without copying any .csv or .parquet files into the image
+- Docker build context size is measurably smaller than before the .dockerignore was added"
+Add reports/ and mlruns/ volume mounts to docker-compose,Story,Epic 4: Container & Environment Hardening,Medium,"As a DevOps Engineer, I want reports/ and mlruns/ persisted as Docker volumes so that monitoring artifacts and MLflow experiment logs survive container restarts.","- docker-compose.yaml mounts ./reports:/app/reports for the jupyter and airflow services
+- docker-compose.yaml mounts ./mlruns:/app/mlruns for the jupyter, mlflow, and airflow services
+- docker-compose.yaml mounts ./dags:/app/dags and ./src:/app/src for the airflow service
+- After running docker compose down followed by docker compose up, the MLflow UI still shows all previous experiment runs
+- Reports written during a container session are present in the host reports/ directory after the container stops"
+Add Docker-based test job to CI pipeline,Story,Epic 5: CI/CD Pipeline Enhancement,Medium,"As a DevOps Engineer, I want the CI pipeline to run the full test suite inside the Docker container so that the tested environment exactly matches the container environment used in production.","- A new job docker-test is added to .github/workflows/python-ci.yml
+- The job builds the Docker image using docker build
+- The job runs pytest tests/ -q inside the container via docker run with the data/ directory mounted as a volume
+- The job passes on the main branch without errors
+- Test results or logs are uploaded as a GitHub Actions artifact"
+Add monitoring script validation to CI pipeline,Story,Epic 5: CI/CD Pipeline Enhancement,Medium,"As a DevOps Engineer, I want the monitoring scripts validated in CI so that regressions in data quality or drift detection are caught before merging to main.","- The docker-test CI job (or a sibling job) runs python src/data_quality.py inside the container against mounted data/silver/ fixtures
+- The same job runs python src/monitor.py against mounted data/gold/ splits
+- Both commands must exit with code 0 for the CI job to pass
+- PRs to main cannot be merged if either monitoring script exits with a non-zero code"
+Create model promotion script with champion/challenger comparison,Story,Epic 6: Advanced Deployment Strategy,Low,"As an ML Engineer, I want a model promotion script that evaluates the Staging model against the current Production model before promoting so that only a genuinely better model is deployed to Production.","- src/promote.py exists and runs without errors against the MLflow registry
+- Script loads both the Staging and Production versions of ChurnModel
+- Both versions are evaluated on data/gold/test_labeled.parquet using auc_roc as the comparison metric
+- If the Staging model exceeds the Production model's AUC by at least 1 percentage point, it is promoted to Production
+- If the threshold is not met, promotion is skipped and a warning is printed with the exact delta
+- If no Production model exists, the Staging model is promoted unconditionally
+- Promotion decision, staging_auc, production_auc, and delta are logged as MLflow metrics"
+Wire model promotion into Airflow DAG,Story,Epic 6: Advanced Deployment Strategy,Low,"As a Data Engineer, I want the model promotion step wired into the Airflow DAG after monitoring so that champion/challenger evaluation runs automatically at the end of every pipeline cycle.","- A PythonOperator task promote_model_if_better is downstream of run_drift_monitoring
+- Task calls src/promote.promote_if_better() and completes successfully
+- DAG run order enforces: run_drift_monitoring >> promote_model_if_better
+- The full DAG end-to-end order is: bronze >> silver >> quality_gate >> gold >> train >> monitor >> promote"
