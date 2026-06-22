@@ -159,7 +159,8 @@ def batch_predict(input_path: str, output_path: str) -> pd.DataFrame:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input", default="data/gold/feature_store.parquet")
+    # Score the latest point-in-time snapshot (see SCORING_SNAPSHOT in utils/gold.py).
+    parser.add_argument("--input", default="data/gold/feature_store_2011-08-31.parquet")
     parser.add_argument("--output", default="data/gold/predictions.parquet")
     args = parser.parse_args()
     batch_predict(args.input, args.output)

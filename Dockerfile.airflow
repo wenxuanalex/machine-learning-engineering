@@ -9,5 +9,4 @@ RUN pip install --no-cache-dir \
     pyarrow==15.0.2 \
     mlflow==2.14.3 \
     optuna==3.6.1 \
-    evidently==0.4.40 \
     shap==0.46.0

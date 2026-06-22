@@ -16,7 +16,7 @@ Full pipeline dependency graph:
                                                      promote_model
 
 Separate weekly DAG (churn_weekly_inference in weekly_inference_dag.py):
-  run_predict -> run_monitor  (batch scoring + Evidently drift report)
+  run_predict -> run_monitor  (batch scoring + PSI drift summary)
 
 The monthly pipeline retrains and gates promotion on AUC improvement.
 The weekly pipeline scores the latest Production model and monitors for drift.
@@ -36,7 +36,12 @@ from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
 
 from utils.bronze import ingest
-from utils.gold import build_gold_feature_store, build_gold_train_test_split
+from utils.gold import (
+    TRAINING_SNAPSHOT,
+    build_gold_snapshots,
+    build_gold_train_test_split,
+    snapshot_path,
+)
 from utils.silver import (
     clean_customer_metadata,
     clean_macro_monthly,
@@ -170,13 +175,15 @@ def silver_quality_gate() -> None:
 # ---------------------------------------------------------------------------
 
 def gold_feature_store() -> dict:
+    # Build every point-in-time snapshot (training baseline + later scoring batch).
     os.chdir(PROJECT_ROOT)
-    return build_gold_feature_store()
+    return build_gold_snapshots()
 
 
 def gold_train_test_split() -> dict:
+    # Model dev splits derive from the training snapshot only.
     os.chdir(PROJECT_ROOT)
-    return build_gold_train_test_split()
+    return build_gold_train_test_split(feature_store_path=snapshot_path(TRAINING_SNAPSHOT))
 
 
 # ---------------------------------------------------------------------------
