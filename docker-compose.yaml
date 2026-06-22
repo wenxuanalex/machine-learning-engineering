@@ -59,6 +59,8 @@
       # reading and writing the data layers in place.
       - ./utils:/opt/airflow/utils
       - ./data:/opt/airflow/data
+      # The weekly DAG writes drift/bias reports here; mount so they persist.
+      - ./reports:/opt/airflow/reports
       - ./mlruns:/app/mlruns
     command:
       - bash
