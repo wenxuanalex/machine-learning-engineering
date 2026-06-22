@@ -1,10 +1,10 @@
-"""Weekly batch inference + Evidently drift monitoring DAG.
+"""Weekly batch inference + drift monitoring DAG.
 
 Runs every week. Two tasks in strict sequence:
   1. run_predict  — scores feature_store.parquet via src/predict.py,
                     writes data/gold/predictions.parquet
-  2. run_monitor  — generates an Evidently HTML drift report via src/monitor.py,
-                    writes reports/drift_report_YYYYMMDD.html
+  2. run_monitor  — generates the PSI drift summary + bias + fairness reports via
+                    src/monitor.py, writes reports/drift_summary_YYYYMMDD.html
 
 The upstream monthly data pipeline (churn_data_pipeline) is not modified.
 This DAG assumes feature_store.parquet and train_labeled.parquet have already
@@ -38,7 +38,7 @@ default_args = {
 with DAG(
     dag_id="churn_weekly_inference",
     default_args=default_args,
-    description="Weekly batch inference + Evidently drift report",
+    description="Weekly batch inference + PSI drift summary",
     schedule="@weekly",
     start_date=datetime(2024, 1, 1),
     catchup=False,

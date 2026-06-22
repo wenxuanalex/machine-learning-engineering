@@ -65,8 +65,8 @@ Raw CSVs → Bronze (parquet) → Silver (cleaned) → Gold (feature store)
                                predict.py                          mlflow models serve
                                weekly CSV + parquet                REST /invocations
                                     │
-                               Evidently monitoring
-                               drift_report · bias_drift · shap_attribution
+                               PSI monitoring
+                               drift_summary · bias_drift · fairness · shap_attribution
 ```
 
 ---
@@ -115,13 +115,13 @@ src/
   train.py     train LR / RF / GBM+Optuna, register @Staging
   promote.py   champion/challenger AUC gate, promote to @Production
   predict.py   batch inference, risk tier CSV, SHAP attribution
-  monitor.py   Evidently drift + bias drift segment report
+  monitor.py   PSI drift summary + bias drift + model fairness
 utils/
   bronze.py · silver.py · gold.py · timestamps.py
 eda/
   eda.ipynb · eda_gold.ipynb
-tests/           pytest suite (34 tests)
-reports/         drift_report · bias_drift · shap_attribution outputs
+tests/           pytest suite (40 tests)
+reports/         drift_summary · bias_drift · fairness · shap_attribution outputs
 ```
 
 ---
@@ -157,7 +157,7 @@ Artefacts written to `reports/` on every weekly run. Reference = the training sn
 
 | File | What it covers |
 |---|---|
-| `drift_report_YYYYMMDD.html` | Evidently: data drift, target drift, data quality (training snapshot vs latest snapshot) |
+| `drift_summary_YYYYMMDD.html` / `.csv` | One PSI table: each model feature + the target scored by Population Stability Index with a stable/moderate/significant verdict (thresholds 0.10 / 0.25), training snapshot vs latest snapshot. Macro features shown as context (excluded). |
 | `bias_drift_YYYYMMDD.html` | Segment-level churn rate shift across company_size, region, vertical, onboard_channel — alerts at ±10% |
 | `fairness_report_YYYYMMDD.html` | Per-segment model performance (selection rate, recall, precision, FPR) — predictions vs true labels; flags groups served worse than average |
 | `shap_attribution_YYYYMMDD.png` | Mean \|SHAP\| bar chart for feature attribution tracking |

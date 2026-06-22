@@ -16,7 +16,7 @@ Full pipeline dependency graph:
                                                      promote_model
 
 Separate weekly DAG (churn_weekly_inference in weekly_inference_dag.py):
-  run_predict -> run_monitor  (batch scoring + Evidently drift report)
+  run_predict -> run_monitor  (batch scoring + PSI drift summary)
 
 The monthly pipeline retrains and gates promotion on AUC improvement.
 The weekly pipeline scores the latest Production model and monitors for drift.
