@@ -113,10 +113,12 @@ def _build_cancellation_rate(
 
 def _build_churn_labels(
     silver_tx: pd.DataFrame,
-    label_start: pd.Timestamp,
-    label_end: pd.Timestamp,
+    obs_end: pd.Timestamp,
+    label_horizon_days: int,
     modelable_customers: pd.Index,
 ) -> pd.DataFrame:
+    label_start = obs_end + pd.Timedelta(days=1)
+    label_end = obs_end + pd.Timedelta(days=label_horizon_days)
     label_tx = silver_tx[
         (silver_tx["invoice_date"] >= label_start) & (silver_tx["invoice_date"] <= label_end)
     ]
@@ -159,19 +161,18 @@ def _auxiliary_snapshot_month(obs_end: pd.Timestamp, lag_months: int) -> str:
 # against that baseline. "Reference" and "current" are therefore just two runs of
 # the same step at different scoring dates — not two bespoke datasets.
 #
-# Each label window is the 3 months (~90 days) immediately following the
-# observation window, matching the "no purchase within 90 days" churn definition.
-# Two non-overlapping 4-month observation windows (winter vs summer) keep the
-# cohorts genuinely distinct — different customers, different seasonality — so the
-# drift report carries real, explainable signal rather than sampling noise.
+# Each label window is the 90 days immediately following the observation
+# window, matching the proposal's churn definition. The two observation windows
+# below are non-overlapping (winter vs summer) so the drift comparison is a true
+# earlier-vs-later temporal check rather than two samples from the same period.
+
+LABEL_HORIZON_DAYS = 90
 GOLD_SNAPSHOTS: dict[str, dict[str, str]] = {
     "2011-03-31": {  # baseline / training snapshot (winter observation)
         "obs_start": "2010-12-01", "obs_end": "2011-03-31",
-        "label_start": "2011-04-01", "label_end": "2011-06-30",
     },
     "2011-08-31": {  # latest / scoring + monitoring snapshot (summer observation)
         "obs_start": "2011-05-01", "obs_end": "2011-08-31",
-        "label_start": "2011-09-01", "label_end": "2011-11-30",
     },
 }
 TRAINING_SNAPSHOT = "2011-03-31"  # trained on + used as the drift reference
@@ -191,14 +192,38 @@ def build_gold_snapshots() -> dict:
     """
     results = {}
     for scoring_date, w in GOLD_SNAPSHOTS.items():
+        obs_end_ts = pd.Timestamp(w["obs_end"])
         results[scoring_date] = build_gold_feature_store(
             dest_parquet=snapshot_path(scoring_date),
             obs_start=w["obs_start"],
             obs_end=w["obs_end"],
-            label_start=w["label_start"],
-            label_end=w["label_end"],
+            label_horizon_days=LABEL_HORIZON_DAYS,
         )
     return results
+
+
+def _macro_feature_month(column: str, obs_end: pd.Timestamp) -> str:
+    """Return the latest month that would have been available for a macro column."""
+    obs_month = obs_end.to_period("M")
+
+    if column.startswith(("uk_gdp", "uk_gdp_yoy")):
+        return ((obs_month.to_timestamp(how="end").to_period("Q") - 1).end_time.to_period("M")).strftime("%Y-%m")
+
+    if column.startswith(("uk_cpi", "uk_cpi_yoy", "uk_ind_production", "uk_ind_prod_yoy")):
+        return (obs_month - 1).strftime("%Y-%m")
+
+    return obs_month.strftime("%Y-%m")
+
+
+def _macro_snapshot(macro_monthly: pd.DataFrame, obs_end: pd.Timestamp) -> dict:
+    rows = {}
+    for column in [c for c in macro_monthly.columns if c != "year_month"]:
+        target_month = _macro_feature_month(column, obs_end=obs_end)
+        row = macro_monthly.loc[macro_monthly["year_month"] == target_month]
+        if row.empty:
+            raise ValueError(f"No macro row found for lagged month {target_month} (column: {column}).")
+        rows[f"macro_{column}"] = row.iloc[0][column]
+    return rows
 
 
 def build_gold_feature_store(
@@ -209,12 +234,10 @@ def build_gold_feature_store(
     dest_parquet: str = "data/gold/feature_store.parquet",
     obs_start: str = "2010-12-01",
     obs_end: str = "2011-08-31",
-    label_start: str = "2011-09-01",
-    label_end: str = "2011-12-31",
-    macro_lag_months: int = 1,
     auxiliary_lag_months: int | None = None,
+    label_horizon_days: int = LABEL_HORIZON_DAYS,
 ) -> dict:
-    """Build one-row-per-customer gold feature store with churn labels."""
+    """Build one-row-per-customer gold feature store with a 90-day churn label horizon."""
     silver_tx_path = _resolve_path(silver_tx_parquet)
     bronze_tx_path = _resolve_path(bronze_tx_parquet)
     silver_crm_path = _resolve_path(silver_crm_parquet)
@@ -223,10 +246,8 @@ def build_gold_feature_store(
 
     obs_start_ts = _as_timestamp(obs_start)
     obs_end_ts = _as_timestamp(obs_end)
-    label_start_ts = _as_timestamp(label_start)
-    label_end_ts = _as_timestamp(label_end)
     if auxiliary_lag_months is None:
-        auxiliary_lag_months = macro_lag_months
+        auxiliary_lag_months = 1
 
     silver_tx = pd.read_parquet(silver_tx_path).copy()
     silver_tx["invoice_date"] = pd.to_datetime(silver_tx["invoice_date"], errors="coerce")
@@ -251,14 +272,17 @@ def build_gold_feature_store(
 
     labels = _build_churn_labels(
         silver_tx=silver_tx,
-        label_start=label_start_ts,
-        label_end=label_end_ts,
+        obs_end=obs_end_ts,
+        label_horizon_days=label_horizon_days,
         modelable_customers=modelable_customers,
     )
 
+    label_start_ts = obs_end_ts + pd.Timedelta(days=1)
+    label_end_ts = obs_end_ts + pd.Timedelta(days=label_horizon_days)
+
     crm = pd.read_parquet(silver_crm_path)
     macro = pd.read_parquet(silver_macro_path)
-    macro_values = _macro_snapshot(macro, obs_end=obs_end_ts, macro_lag_months=macro_lag_months)
+    macro_values = _macro_snapshot(macro, obs_end=obs_end_ts)
     auxiliary_snapshot_month = _auxiliary_snapshot_month(obs_end_ts, auxiliary_lag_months)
 
     feature_store = (
@@ -277,7 +301,7 @@ def build_gold_feature_store(
         feature_store[col] = feature_store[col].fillna(0.0)
 
     feature_store["scoring_date"] = obs_end_ts
-    feature_store["macro_lag_months"] = macro_lag_months
+    feature_store["macro_lag_months"] = 3
     feature_store["auxiliary_lag_months"] = auxiliary_lag_months
     feature_store["auxiliary_snapshot_month"] = auxiliary_snapshot_month
     for key, value in macro_values.items():
@@ -308,7 +332,8 @@ def build_gold_feature_store(
         "modelable_customers": len(modelable_customers),
         "observation_window": f"{obs_start_ts.date()} to {obs_end_ts.date()}",
         "label_window": f"{label_start_ts.date()} to {label_end_ts.date()}",
-        "macro_snapshot_month": (obs_end_ts.to_period("M") - macro_lag_months).strftime("%Y-%m"),
+        "label_horizon_days": label_horizon_days,
+        "macro_snapshot_month": obs_end_ts.to_period("M").strftime("%Y-%m"),
         "auxiliary_snapshot_month": auxiliary_snapshot_month,
         "auxiliary_lag_months": auxiliary_lag_months,
         "feature_list": feature_list,

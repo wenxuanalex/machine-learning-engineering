@@ -43,7 +43,9 @@ def test_gold_churn_label_is_binary(gold_df):
 def test_gold_has_lagged_macro_columns(gold_df):
     assert "macro_lag_months" in gold_df.columns
     assert "macro_ftse_monthly_return" in gold_df.columns
-    assert (gold_df["macro_lag_months"] == 1).all()
+    # macro_lag_months=3 for GDP publication lag (quarterly reporting)
+    # Per-column lags: GDP=3mo, CPI=1mo, market_returns=0mo
+    assert (gold_df["macro_lag_months"] == 3).all()
 
 
 def test_gold_has_lagged_auxiliary_metadata(gold_df):
