@@ -372,22 +372,48 @@ def generate_drift_report(
     rows = [{
         "Signal": "churn (target)",
         "Type": "target",
-        "Reference": f"{reference['is_churn_label'].mean():.1%}",
-        "Current": f"{current['is_churn_label'].mean():.1%}",
+        "Reference (Mean / Top Cat %)": f"{reference['is_churn_label'].mean():.1%}",
+        "Current (Mean / Top Cat %)": f"{current['is_churn_label'].mean():.1%}",
         "PSI": _psi(reference["is_churn_label"], current["is_churn_label"], categorical=True),
     }]
     for col in feature_cols:
         cat = col in CATEGORICAL_COLS
+        if cat:
+            ref_vc = reference[col].astype(str).value_counts(normalize=True)
+            top_cat = ref_vc.index[0] if not ref_vc.empty else "n/a"
+            ref_str = f"{top_cat} ({ref_vc.iloc[0]:.0%})" if not ref_vc.empty else "n/a"
+            
+            cur_vc = current[col].astype(str).value_counts(normalize=True)
+            cur_pct = cur_vc.get(top_cat, 0.0)
+            cur_str = f"{top_cat} ({cur_pct:.0%})" if top_cat != "n/a" else "n/a"
+        else:
+            ref_str = _distribution_summary(reference[col], False)
+            cur_str = _distribution_summary(current[col], False)
+
         rows.append({
             "Signal": col,
             "Type": "categorical" if cat else "numeric",
-            "Reference": _distribution_summary(reference[col], cat),
-            "Current": _distribution_summary(current[col], cat),
+            "Reference (Mean / Top Cat %)": ref_str,
+            "Current (Mean / Top Cat %)": cur_str,
             "PSI": _psi(reference[col], current[col], categorical=cat),
         })
 
     table = pd.DataFrame(rows)
     table["Status"] = table["PSI"].apply(_psi_status)
+
+    # Override target status using relative rate change
+    if "target" in table["Type"].values:
+        target_idx = table[table["Type"] == "target"].index[0]
+        ref_rate = reference["is_churn_label"].mean()
+        cur_rate = current["is_churn_label"].mean()
+        rel_change = abs(cur_rate - ref_rate) / ref_rate if ref_rate > 0 else 0
+        if rel_change > 0.20:
+            table.loc[target_idx, "Status"] = "Significant"
+        elif rel_change > 0.10:
+            table.loc[target_idx, "Status"] = "Moderate"
+        else:
+            table.loc[target_idx, "Status"] = "Stable"
+
     # Target pinned on top; features below, most-drifted first.
     feats = table[table["Type"] != "target"].sort_values("PSI", ascending=False)
     table = pd.concat([table[table["Type"] == "target"], feats], ignore_index=True)
@@ -409,10 +435,11 @@ def generate_drift_report(
     )
 
     legend = (
-        "<table><tr><th>Status</th><th>PSI range</th><th>Action</th></tr>"
-        "<tr style='background:#e3f4e1'><td>🟢 Stable</td><td>&lt; 0.10</td><td>none</td></tr>"
-        "<tr style='background:#fff0cc'><td>🟠 Moderate</td><td>0.10 – 0.25</td><td>watch</td></tr>"
-        "<tr style='background:#ffd6d6'><td>🔴 Significant</td><td>&gt; 0.25</td><td>investigate / retrain</td></tr>"
+        "<p style='margin-bottom:8px'><strong>Evaluation Logic:</strong> Features are evaluated <em>only</em> by PSI; the Target is evaluated <em>only</em> by Relative Change.</p>"
+        "<table><tr><th>Status</th><th>Feature Threshold (PSI)</th><th>Target Threshold (Relative Change)</th><th>Action</th></tr>"
+        "<tr style='background:#e3f4e1'><td>🟢 Stable</td><td>&lt; 0.10</td><td>&lt; 10%</td><td>none</td></tr>"
+        "<tr style='background:#fff0cc'><td>🟠 Moderate</td><td>0.10 – 0.25</td><td>10% – 20%</td><td>watch</td></tr>"
+        "<tr style='background:#ffd6d6'><td>🔴 Significant</td><td>&gt; 0.25</td><td>&gt; 20%</td><td>investigate / retrain</td></tr>"
         "</table>"
     )
     headline = (
@@ -421,11 +448,12 @@ def generate_drift_report(
         f"predicted churn rate (current) {pred_rate:.1%}.</p>"
     )
     context = (
-        "<p style='color:#555'>Reference = training snapshot · Current = latest snapshot. "
+        "<p style='color:#555'>Reference = training snapshot (Observation window: 2010-12-01 to 2011-03-31). "
+        "Current = Out-Of-Time (OOT) snapshot (Observation window: 2011-05-01 to 2011-08-31).<br>"
         f"Macro features excluded (single value per snapshot): reference month {macro_ref}, "
         f"current month {macro_cur}.<br>"
-        "Note: PSI compresses for a binary target, so the churn row can read 'Stable' even on a "
-        "material rate move — read the target by its rate change (shown), not its PSI.</p>"
+        "Note: Target drift status is evaluated using relative rate change rather than PSI, "
+        "as PSI compresses material rate shifts for binary targets.</p>"
     )
 
     output_path = Path(output_dir) / f"drift_summary_{date.today():%Y%m%d}.html"

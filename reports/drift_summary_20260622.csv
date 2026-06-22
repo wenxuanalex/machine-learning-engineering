@@ -1,12 +1,12 @@
-Signal,Type,Reference,Current,PSI,Status
-churn (target),target,45.8%,34.6%,0.052367663675802076,Stable
+Signal,Type,Reference (Mean / Top Cat %),Current (Mean / Top Cat %),PSI,Status
+churn (target),target,45.8%,34.6%,0.052367663675802076,Significant
 recency,numeric,46.03,47.99,0.12025467507889644,Moderate
 avg_basket_size,numeric,227.67,238.48,0.025983438803514777,Stable
 avg_order_interarrival_days,numeric,12.63,15.46,0.024174903720635472,Stable
 product_diversity,numeric,35.91,37.45,0.01562301677426836,Stable
 credit_limit_gbp,numeric,2847.70,2884.43,0.014879591773003966,Stable
 frequency,numeric,2.16,2.39,0.014799427250258606,Stable
-company_size,categorical,Small (46%),Medium (42%),0.01313401277890425,Stable
+company_size,categorical,Small (46%),Small (41%),0.01313401277890425,Stable
 monetary,numeric,974.76,1098.84,0.012872983444137173,Stable
 account_manager,categorical,Self-Serve (46%),Self-Serve (41%),0.011181648743361807,Stable
 rolling_60d_spend,numeric,487.35,521.21,0.010631516609990416,Stable
