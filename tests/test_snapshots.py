@@ -27,8 +27,6 @@ def snapshots(tmp_path_factory):
             dest_parquet=dest,
             obs_start=w["obs_start"],
             obs_end=w["obs_end"],
-            label_start=w["label_start"],
-            label_end=w["label_end"],
         )
         built[scoring_date] = pd.read_parquet(dest)
     return built
@@ -38,14 +36,19 @@ def test_label_window_strictly_after_observation():
     # Config-level point-in-time guarantee: label is measured strictly after the
     # observation window, so no label-window data can leak into a feature.
     for scoring_date, w in GOLD_SNAPSHOTS.items():
-        assert w["obs_start"] <= w["obs_end"] < w["label_start"] <= w["label_end"], scoring_date
+        obs_end = pd.Timestamp(w["obs_end"])
+        label_start = obs_end + pd.Timedelta(days=1)
+        label_end = obs_end + pd.Timedelta(days=90)
+        assert pd.Timestamp(w["obs_start"]) <= obs_end < label_start <= label_end, scoring_date
 
 
 def test_training_and_scoring_label_windows_are_disjoint():
     # The training label window must close before the scoring label window opens.
+    train_end = pd.Timestamp(GOLD_SNAPSHOTS[TRAINING_SNAPSHOT]["obs_end"]) + pd.Timedelta(days=90)
+    score_start = pd.Timestamp(GOLD_SNAPSHOTS[SCORING_SNAPSHOT]["obs_end"]) + pd.Timedelta(days=1)
     assert (
-        GOLD_SNAPSHOTS[TRAINING_SNAPSHOT]["label_end"]
-        < GOLD_SNAPSHOTS[SCORING_SNAPSHOT]["label_start"]
+        train_end
+        < score_start
     )
 
 

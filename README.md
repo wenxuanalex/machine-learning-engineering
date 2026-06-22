@@ -132,10 +132,12 @@ The feature pipeline is **one parameterised step**, keyed by a *scoring date* (t
 
 | Snapshot | Role | Observation window | Label window (90d) |
 |---|---|---|---|
-| `2011-03-31` | training baseline + **drift reference** | 2010-12-01 → 2011-03-31 | 2011-04-01 → 2011-06-30 |
-| `2011-08-31` | latest — **scored + monitored** | 2011-05-01 → 2011-08-31 | 2011-09-01 → 2011-11-30 |
+| `2011-03-31` | training baseline + **drift reference** | 2010-12-01 → 2011-03-31 | 2011-04-01 → 2011-06-29 |
+| `2011-08-31` | latest — **scored + monitored** | 2011-05-01 → 2011-08-31 | 2011-09-01 → 2011-11-29 |
 
 `is_churn_label = 1` if the customer makes **no purchase within the 90-day label window** following their observation window. Macro features lagged by 1 month to prevent leakage.
+
+Macro features are joined using the latest information that would have been available at scoring time: market series use the current month snapshot, CPI / industrial production use the prior month, and GDP uses the latest released quarter rather than the current calendar quarter.
 
 The two windows are non-overlapping (winter vs summer observation), so the snapshots are genuinely different distributions — that is what makes the drift report meaningful (an *earlier-vs-later* comparison) rather than two random samples of one dataset. Train/val/test splits derive from the **training snapshot**; `predict.py` scores the **latest snapshot** and `monitor.py` compares it against the training baseline. Snapshot windows are defined in `GOLD_SNAPSHOTS` (`utils/gold.py`).
 
