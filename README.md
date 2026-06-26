@@ -126,46 +126,6 @@ reports/         drift_summary · bias_drift · fairness · shap_attribution out
 
 ---
 
-## Gold Layer Feature Store — point-in-time snapshots
-
-The feature pipeline is **one parameterised step**, keyed by a *scoring date* (the observation cut-off). Running it per scoring date emits a dated snapshot (`data/gold/feature_store_<scoring_date>.parquet`), one row per modelable customer. Over time these snapshots accumulate; we build two:
-
-| Snapshot | Role | Observation window | Label window (90d) |
-|---|---|---|---|
-| `2011-03-31` | training baseline + **drift reference** | 2010-12-01 → 2011-03-31 | 2011-04-01 → 2011-06-29 |
-| `2011-08-31` | latest — **scored + monitored** | 2011-05-01 → 2011-08-31 | 2011-09-01 → 2011-11-29 |
-
-`is_churn_label = 1` if the customer makes **no purchase within the 90-day label window** following their observation window. Macro features lagged by 1 month to prevent leakage.
-
-Macro features are joined using the latest information that would have been available at scoring time: market series use the current month snapshot, CPI / industrial production use the prior month, and GDP uses the latest released quarter rather than the current calendar quarter.
-
-The two windows are non-overlapping (winter vs summer observation), so the snapshots are genuinely different distributions — that is what makes the drift report meaningful (an *earlier-vs-later* comparison) rather than two random samples of one dataset. Train/val/test splits derive from the **training snapshot**; `predict.py` scores the **latest snapshot** and `monitor.py` compares it against the training baseline. Snapshot windows are defined in `GOLD_SNAPSHOTS` (`utils/gold.py`).
-
-**Features:** recency, frequency, monetary, avg_basket_size, avg_orderinterarrival_days, product_diversity, cancellation_rate, rolling_30/60/90d_spend, CRM dimensions (company_size, vertical, region, onboard_channel, account_manager), credit/payment terms, macro indicators (FTSE, GDP, CPI, etc.)
-
----
-
-## Deployment Strategy
-
-Batch inference is the appropriate deployment type for this use case — churn intervention is a weekly business process, not a real-time decision. `promote.py` implements a **champion/challenger** pattern: the Staging model is evaluated on a held-out test set (a stratified split of the training snapshot) and promoted to Production only if AUC improves by ≥ 1 point (`MIN_DELTA = 0.01`). The promotion decision and AUC delta are logged as MLflow metrics.
-
-An online inference endpoint (`mlflow models serve`) is wired into `docker-compose.yaml` under the `optional` profile for use cases requiring real-time scoring.
-
----
-
-## Monitoring
-
-Artefacts written to `reports/` on every weekly run. Reference = the training snapshot; current = the latest snapshot, so drift is a genuine earlier-vs-later comparison:
-
-| File | What it covers |
-|---|---|
-| `drift_summary_YYYYMMDD.html` / `.csv` | One PSI table: each model feature + the target scored by Population Stability Index with a stable/moderate/significant verdict (thresholds 0.10 / 0.25), training snapshot vs latest snapshot. Macro features shown as context (excluded). |
-| `bias_drift_YYYYMMDD.html` | Segment-level churn rate shift across company_size, region, vertical, onboard_channel — alerts at ±10% |
-| `fairness_report_YYYYMMDD.html` | Per-segment model performance (selection rate, recall, precision, FPR) — predictions vs true labels; flags groups served worse than average |
-| `shap_attribution_YYYYMMDD.png` | Mean \|SHAP\| bar chart for feature attribution tracking |
-
----
-
 ## Tests
 
 ```bash

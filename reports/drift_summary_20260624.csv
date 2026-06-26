@@ -1,0 +1,21 @@
+Signal,Type,Reference (Mean / Top Cat %),Current (Mean / Top Cat %),PSI,Status
+churn (target),target,46.0%,34.9%,0.05088722579777283,Significant
+recency,numeric,46.37,47.99,0.09620946073162666,Stable
+avg_basket_size,numeric,223.02,238.48,0.02911185167852903,Stable
+product_diversity,numeric,36.34,37.45,0.02355690129022248,Stable
+avg_order_interarrival_days,numeric,12.87,15.46,0.023347235078532112,Stable
+credit_limit_gbp,numeric,2773.33,2884.43,0.017718181192177912,Stable
+monetary,numeric,967.03,1098.84,0.014644648610309874,Stable
+account_manager,categorical,Self-Serve (46%),Self-Serve (41%),0.013387376392090256,Stable
+frequency,numeric,2.17,2.39,0.013334963079983784,Stable
+rolling_60d_spend,numeric,467.13,521.21,0.01080527744668108,Stable
+company_size,categorical,Small (46%),Small (41%),0.010559169301376736,Stable
+years_in_business,numeric,9.25,9.64,0.009461915198195376,Stable
+rolling_90d_spend,numeric,690.63,792.44,0.006232426489826089,Stable
+vertical,categorical,Gift Shop (29%),Gift Shop (28%),0.004994201287689034,Stable
+rolling_30d_spend,numeric,237.46,259.97,0.00441911328991644,Stable
+cancellation_rate,numeric,0.11,0.10,0.0019096098941954597,Stable
+region,categorical,UK (91%),UK (90%),0.0017077255088063978,Stable
+payment_terms_days,numeric,45.52,46.20,0.001120845003449638,Stable
+onboard_channel,categorical,Online Enquiry (30%),Online Enquiry (30%),0.001046516204279741,Stable
+is_vip,numeric,0.17,0.17,0.0,Stable
